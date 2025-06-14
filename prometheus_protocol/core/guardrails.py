@@ -12,8 +12,8 @@ def validate_prompt(prompt: PromptObject) -> None:
 
     Raises:
         MissingRequiredFieldError: If 'role', 'task', or 'context' are empty or whitespace.
-        InvalidListTypeError: If 'constraints' or 'examples' are provided but are not lists.
-        InvalidListItemError: If items in 'constraints' or 'examples' lists are not non-empty strings.
+        InvalidListTypeError: If 'constraints', 'examples', or 'tags' (if provided and not empty) are not lists.
+        InvalidListItemError: If items in 'constraints', 'examples', or 'tags' (if provided and not empty) lists are not non-empty strings.
     """
     if not prompt.role or not prompt.role.strip():
         raise MissingRequiredFieldError("Role must be a non-empty string.")
@@ -37,5 +37,12 @@ def validate_prompt(prompt: PromptObject) -> None:
         for item in prompt.examples:
             if not isinstance(item, str) or not item.strip():
                 raise InvalidListItemError("Each example must be a non-empty string.")
+
+    if prompt.tags is not None and prompt.tags: # Check if tags is provided and not an empty list
+        if not isinstance(prompt.tags, List):
+            raise InvalidListTypeError("Tags, if provided, must be a list.")
+        for item in prompt.tags:
+            if not isinstance(item, str) or not item.strip():
+                raise InvalidListItemError("Each tag must be a non-empty string.")
 
     # If all checks pass, the function returns None implicitly.

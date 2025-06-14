@@ -104,5 +104,48 @@ class TestGuardrails(unittest.TestCase):
         except PromptValidationError:
             self.fail("validate_prompt() raised PromptValidationError unexpectedly for None examples!")
 
+    # Tests for tags
+    def test_tags_none(self):
+        """Test that tags can be None and pass validation."""
+        prompt = self.create_valid_prompt_object(tags=None)
+        try:
+            validate_prompt(prompt)
+        except PromptValidationError:
+            self.fail("validate_prompt() raised PromptValidationError unexpectedly for None tags!")
+
+    def test_tags_empty_list(self):
+        """Test that tags can be an empty list and pass validation."""
+        prompt = self.create_valid_prompt_object(tags=[])
+        try:
+            validate_prompt(prompt)
+        except PromptValidationError:
+            self.fail("validate_prompt() raised PromptValidationError unexpectedly for empty list tags!")
+
+    def test_tags_valid_list(self):
+        """Test that a valid list of non-empty string tags passes validation."""
+        prompt = self.create_valid_prompt_object(tags=["valid", "tag"])
+        try:
+            validate_prompt(prompt)
+        except PromptValidationError:
+            self.fail("validate_prompt() raised PromptValidationError unexpectedly for valid tags!")
+
+    def test_tags_not_a_list(self):
+        """Test that non-list tags raise InvalidListTypeError."""
+        with self.assertRaisesRegex(InvalidListTypeError, "Tags, if provided, must be a list."):
+            prompt = self.create_valid_prompt_object(tags="not a list")
+            validate_prompt(prompt)
+
+    def test_tags_list_invalid_item_type(self):
+        """Test that tags list with non-string items raises InvalidListItemError."""
+        with self.assertRaisesRegex(InvalidListItemError, "Each tag must be a non-empty string."):
+            prompt = self.create_valid_prompt_object(tags=["Valid", 123])
+            validate_prompt(prompt)
+
+    def test_tags_list_empty_item(self):
+        """Test that tags list with empty string items raises InvalidListItemError."""
+        with self.assertRaisesRegex(InvalidListItemError, "Each tag must be a non-empty string."):
+            prompt = self.create_valid_prompt_object(tags=["Valid", "   "])
+            validate_prompt(prompt)
+
 if __name__ == '__main__':
     unittest.main()

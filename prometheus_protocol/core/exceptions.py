@@ -17,3 +17,10 @@ class InvalidListItemError(PromptValidationError):
     """Raised when items within 'constraints' or 'examples' lists are not valid
     (e.g., not non-empty strings)."""
     pass
+
+# Add this class to the existing exceptions
+
+class TemplateCorruptedError(ValueError):
+    """Raised when a template file is corrupted, not valid JSON,
+    or cannot be deserialized into a PromptObject."""
+    pass
