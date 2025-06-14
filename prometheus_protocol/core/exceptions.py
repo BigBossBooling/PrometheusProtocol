@@ -24,3 +24,10 @@ class TemplateCorruptedError(ValueError):
     """Raised when a template file is corrupted, not valid JSON,
     or cannot be deserialized into a PromptObject."""
     pass
+
+# Add this class to the existing exceptions
+
+class ConversationCorruptedError(ValueError):
+    """Raised when a conversation file is corrupted, not valid JSON,
+    or cannot be deserialized into a Conversation object."""
+    pass
