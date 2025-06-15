@@ -1,3 +1,4 @@
+
 # Prometheus Protocol: Engineering Intent
 
 Prometheus Protocol is a sophisticated software project designed to transform the act of prompting Artificial Intelligence into a precise, architected science. It aims to empower users to extract the highest statistically positive variable of best likely outcomes from Google's cutting-edge "Jules" platform.
