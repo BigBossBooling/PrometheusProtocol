@@ -193,11 +193,12 @@ This section describes how a `Conversation` object, composed of multiple `Prompt
 
 ### A. Orchestrating Process
 
-A higher-level process or function, let's call it `run_conversation_flow`, would be responsible for managing the execution of a `Conversation`. This process would likely:
-1.  Initialize a `JulesExecutor` instance.
+The `ConversationOrchestrator` class (defined in [`core/conversation_orchestrator.py`](../core/conversation_orchestrator.py)) is responsible for managing the execution of a `Conversation`. Its primary method for this is `run_full_conversation(conversation: Conversation)`. This method encapsulates the logic to:
+1.  Utilize an injected `JulesExecutor` instance for AI interactions.
 2.  Take a `Conversation` object as input.
-3.  Maintain a `current_conversation_history` list.
-4.  Store all `AIResponse` objects generated during the flow.
+3.  Maintain the `current_conversation_history` list passed between turns.
+4.  Store all `AIResponse` objects generated during the flow, associated with their respective `turn_id`s.
+5.  Populate the `source_conversation_id` field in each `AIResponse`.
 
 ### B. Turn-by-Turn Execution Loop
 
@@ -214,7 +215,7 @@ The `run_conversation_flow` process would iterate through the `Conversation.turn
     *   **b. Execute the Turn:**
         *   Call `jules_executor.execute_conversation_turn(turn, current_conversation_history)`.
         *   This returns an `AIResponse` object for the current turn.
-        *   The `AIResponse` object should have its `source_conversation_id` field populated with the ID of the `Conversation` being executed. This would likely be done by the `run_conversation_flow` orchestrator before or after receiving the response from the executor.
+        *   The `AIResponse` object will have its `source_conversation_id` field populated by the `ConversationOrchestrator.run_full_conversation` method.
 
     *   **c. Store the `AIResponse`:** Associate this `AIResponse` with the current `PromptTurn` (e.g., in a dictionary mapping `turn_id` to `AIResponse`).
 

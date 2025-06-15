@@ -182,6 +182,13 @@ This section describes the main classes, functions, and conceptual components th
     *   **Operates On:** `PromptObject`, `PromptTurn`, `List[Dict[str,str]]` (for history).
     *   **Produces:** `AIResponse` (simulated).
 
+*   **`ConversationOrchestrator`** ([`core/conversation_orchestrator.py`](./core/conversation_orchestrator.py))
+    *   **Responsibility:** Manages the sequential execution of a `Conversation` object, orchestrating turn-by-turn interaction with the `JulesExecutor`.
+    *   **Key Method:** `run_full_conversation(conversation: Conversation) -> Dict[str, AIResponse]`
+    *   **Core Functionality:** Iterates through `PromptTurn`s in a `Conversation`, calls `JulesExecutor.execute_conversation_turn` for each, manages the `conversation_history` list passed between turns, populates `AIResponse.source_conversation_id`, and collects all `AIResponse` objects. For V1, halts execution on the first turn that results in an error.
+    *   **Operates On:** `Conversation`, `JulesExecutor`.
+    *   **Produces:** `Dict[str, AIResponse]` (mapping turn IDs to their responses).
+
 ---
 
 ## 5. Key Conceptual Features (Detailed Documents)
@@ -247,10 +254,9 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Serialization:** Handled in `to_dict()` and `from_dict()`. Defaults to `None` if missing in deserialized data.
     *   **Next Steps (Future Work):** Integration with a user authentication system to automatically populate this field upon `PromptObject` creation by a logged-in user. UI concepts to display this information where relevant.
 
-3.  **`AIResponse` - Storing `source_conversation_id`:**
-    *   **Issue:** The `JulesExecutor.execute_conversation_turn` currently notes that `source_conversation_id` in the `AIResponse` would be set by the calling orchestrator.
-    *   **Refinement:** Ensure that any conceptual `run_conversation_flow` orchestrator (as described in `execution_logic.md`) is explicitly responsible for populating this field in the `AIResponse` objects it receives for each turn.
-    *   **Action:** Confirm this detail in `execution_logic.md` or related orchestrator concepts if they are further detailed.
+3.  **`AIResponse` - Populating `source_conversation_id`:**
+    *   **Status: DONE (as of current iteration - Implemented in `ConversationOrchestrator`)**
+    *   **Summary:** The `ConversationOrchestrator.run_full_conversation` method in [`core/conversation_orchestrator.py`](./core/conversation_orchestrator.py) is now explicitly responsible for populating the `source_conversation_id` field in each `AIResponse` object generated during the execution of a conversation. This ensures proper linkage of turn responses back to the parent `Conversation`.
 
 4.  **`PromptObject.settings` Field and `JulesExecutor` Integration for Dynamic Settings:**
     *   **Status: DONE**
