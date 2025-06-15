@@ -220,17 +220,11 @@ The primary goal for V1 UI concepts is to make analytics accessible and actionab
     *   Side-by-side display of key metrics (especially the user-defined `goal_metric_for_ab_test`) for `prompt_variant_id` "A" vs. "B".
     *   Example: "Variant A: Avg Rating 4.5 | Variant B: Avg Rating 3.8".
 
-### C. Feedback Collection UI (Brief Mention - Links to other UI areas)
+### C. Feedback Collection UI
 
-*   While not the focus of *displaying* analytics, it's important to consider *where* users provide this feedback.
-*   **Post-Generation Feedback Form:** After an AI output is generated (in either the PromptObject Editor testing area or a Conversation execution view):
-    *   A small, non-intrusive form or set of controls appears near the output.
-    *   Allows users to quickly provide ratings (1-5 stars for different categories).
-    *   Input for `custom_tags`.
-    *   Checkbox for `used_in_final_work`.
-    *   Text area for `user_qualitative_feedback`.
-    *   A "Submit Feedback" button.
-*   This feedback would then create an `AnalyticsEntry` linked to the relevant prompt/conversation.
+The detailed conceptual design for the "Analytics Feedback Collection Form" – which includes specific UI elements for ratings (overall, clarity, relevance), custom feedback tags, a "Used in Final Work" flag, and qualitative notes – is now described in the `PromptObject` Editor UI concepts document: [`prometheus_protocol/ui_concepts/prompt_editor.md`](../ui_concepts/prompt_editor.md) (specifically, see Section VIII.B.3 or similar, detailing the form within the "Jules Response Panel").
+
+This form is designed to appear after an AI response is successfully displayed, associated with that specific response, in both the single Prompt Editor view and for each individual turn's response within the Conversation Composer.
 
 This UI aims to make the collected data transparent and useful for users to understand how their prompts are performing and how they might improve them.
 

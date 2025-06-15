@@ -104,41 +104,40 @@ except ImportError as e:
 
 
 # --- Helper Functions for UI ---
+# Ensure PromptValidationError and its subclasses are imported if needed for type checking,
+# though validate_prompt now returns List[PromptValidationError]
+# from prometheus_protocol.core.exceptions import PromptValidationError
+
 def display_gigo_feedback(prompt_object: PromptObject):
-    # Renamed from display_validation_feedback to be more specific
-    # And now takes PromptObject to call validate_prompt internally
-    errors_found = []
-    try:
-        validate_prompt(prompt_object) # Call the validation function
+    """
+    Validates the given PromptObject using core.guardrails.validate_prompt
+    and displays all GIGO (Garbage In, Garbage Out) feedback in Streamlit.
+    """
+    if not isinstance(prompt_object, PromptObject):
+        st.error("Invalid object passed to GIGO feedback display.")
+        return
+
+    validation_errors = validate_prompt(prompt_object) # This now returns a list
+
+    if not validation_errors:
         st.success("GIGO Guardrail: All clear! ✅")
-    except PromptValidationError as e:
-        # Capture the error to display it more structured
-        errors_found.append(e) # This will only capture the first error raised
-
-    if errors_found: # Display if any error was caught
-        st.error("GIGO Guardrail Alerts:")
-        for error in errors_found: # Loop (though only one error is caught by try/except for now)
-            # Attempt to get offending_field if it exists on the error
-            offending_field_str = "N/A"
-            if hasattr(error, 'args') and error.args:
-                # A common pattern for custom exceptions is to pass message as first arg
-                # and other details in a dict or specific args.
-                # For now, let's assume the message contains enough context or we parse it.
-                # A more robust way would be for all PromptValidationError subclasses to have
-                # a consistent way to expose offending_field if applicable.
-                # Let's parse it from message if possible for now for some known errors.
-                msg_str = str(error)
-                if "Role:" in msg_str: offending_field_str = "Role"
-                elif "Context:" in msg_str: offending_field_str = "Context"
-                elif "Task:" in msg_str: offending_field_str = "Task"
-                elif "Constraints" in msg_str: offending_field_str = "Constraints"
-                elif "Examples" in msg_str: offending_field_str = "Examples"
-                elif "Tags" in msg_str: offending_field_str = "Tags"
-
-            st.write(f"- 💔 **{error.__class__.__name__}:** {error}")
-            # The above 'error' will print the full message from the exception.
-            # If we want to show offending_field separately and more reliably:
-            # st.write(f"- 💔 **{error.__class__.__name__}:** {getattr(error, 'message', str(error))} (Field: `{offending_field_str}`)")
+    else:
+        st.error(f"GIGO Guardrail Alerts ({len(validation_errors)} found):")
+        for error_instance in validation_errors:
+            # The str(error_instance) should ideally contain the field information
+            # due to the message formatting updates we made in validate_prompt.
+            # Example: "Role: Must be a non-empty string."
+            # Example: "Constraints (Item 1): Contains unresolved placeholder..."
+            st.write(f"- 💔 **{error_instance.__class__.__name__}:** {str(error_instance)}")
+            # If custom error objects consistently had an 'offending_field' attribute,
+            # we could use it here for more structured display, e.g.:
+            # field = getattr(error_instance, 'offending_field', 'N/A')
+            # item_index = getattr(error_instance, 'item_index', None) # If we add item_index to exceptions
+            # message = getattr(error_instance, 'message', str(error_instance))
+            # st.write(f"- 💔 **{error_instance.__class__.__name__}** (Field: {field}" +
+            #          (f", Item: {item_index+1}" if item_index is not None else "") +
+            #          f"): {message}")
+            # For now, relying on the error's __str__ representation which we updated to be informative.
 
 
 def display_risk_feedback(prompt_object: PromptObject):
@@ -386,16 +385,26 @@ elif menu_choice == "Prompt Editor":
     with col_action3:
         if st.button("⚡ Run with Jules", key="pe_run_jules"):
             # Pre-execution GIGO check
-            gigo_errors_exist = False
-            try:
-                validate_prompt(prompt)
-            except PromptValidationError as e: # Catching specific GIGO base error
-                gigo_errors_exist = True
-                # Display GIGO feedback immediately if error on run attempt
-                st.error("Cannot run: Please fix GIGO Guardrail errors first!")
-                display_gigo_feedback(prompt)
+            validation_errors_run = validate_prompt(prompt) # Get list of errors
 
-            if not gigo_errors_exist: # Proceed only if GIGO checks pass
+            if validation_errors_run: # If list is not empty, there are errors
+                st.error("Cannot run: Please fix GIGO Guardrail errors first!")
+                # Call display_gigo_feedback which now handles list display correctly
+                # No need to call display_gigo_feedback(prompt) here again if it's already displayed below.
+                # The main display_gigo_feedback below the actions will show these.
+                # However, for immediate feedback upon button click, this is okay.
+                # Let's ensure the main display is sufficient.
+                # The main display_gigo_feedback IS called below, so this specific call might be redundant
+                # if the user can see the main feedback area.
+                # For now, let's keep it to ensure error is prominent on "Run" action.
+                # Re-displaying is fine.
+                # To make it cleaner, we might just set a flag and let the main display handle it.
+                # For this iteration, let's assume the immediate feedback here is desired.
+                # No, let's remove this specific call display_gigo_feedback(prompt) here,
+                # as the one in "Guidance & Diagnostics" section will show the errors.
+                # The st.error message is sufficient here.
+                pass # Errors will be shown by the general display_gigo_feedback below.
+            else: # Proceed only if GIGO checks pass (list is empty)
                 # Risk Check (conceptual - user proceeds after warning)
                 risks = risk_identifier.identify_risks(prompt)
                 proceed_after_risk_check = True # Assume proceed unless checkbox logic is added and unchecked
@@ -556,16 +565,23 @@ elif menu_choice == "Conversation Composer":
     with col_conv_act3:
         if st.button("🚀 Run Full Conversation", key="cc_run_conversation"):
             # Pre-execution GIGO check for all turns
-            valid_to_run = True
+            all_turns_valid = True
+            first_error_turn_idx = -1
+            first_error_detail = ""
+
             for turn_idx, turn_obj_check in enumerate(convo.turns):
-                try:
-                    validate_prompt(turn_obj_check.prompt_object)
-                except PromptValidationError as e:
-                    st.error(f"Cannot run: GIGO Error in Turn {turn_idx+1} ('{turn_obj_check.prompt_object.task[:30]}...'): {e}")
-                    valid_to_run = False
+                turn_validation_errors = validate_prompt(turn_obj_check.prompt_object)
+                if turn_validation_errors:
+                    all_turns_valid = False
+                    first_error_turn_idx = turn_idx
+                    # Take the first error from that turn's list for the summary message
+                    first_error_detail = f"{turn_validation_errors[0].__class__.__name__}: {str(turn_validation_errors[0])}"
                     break
 
-            if valid_to_run:
+            if not all_turns_valid:
+                st.error(f"Cannot run: GIGO Error in Turn {first_error_turn_idx+1} ('{convo.turns[first_error_turn_idx].prompt_object.task[:30]}...'): {first_error_detail}")
+                # Errors for specific turn will be displayed within the turn's expander.
+            else: # Proceed if all turns are valid
                 # Conceptual Risk Check for all turns (simplified: proceed if any risks)
                 all_risks_flat = []
                 for turn_obj_check in convo.turns:

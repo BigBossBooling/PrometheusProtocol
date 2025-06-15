@@ -9,46 +9,48 @@ from .exceptions import (
     RepetitiveListItemError    # New
 )
 
-def validate_prompt(prompt: PromptObject) -> None:
+def validate_prompt(prompt: PromptObject) -> List[PromptValidationError]:
     """
     Validates a PromptObject to ensure it meets basic quality criteria.
 
-    Raises:
-        MissingRequiredFieldError: If 'role', 'task', or 'context' are empty or whitespace.
-        InvalidListTypeError: If 'constraints', 'examples', or 'tags' (if provided and not empty) are not lists.
-        InvalidListItemError: If items in 'constraints', 'examples', or 'tags' (if provided and not empty) lists are not non-empty strings.
-        UnresolvedPlaceholderError: If common placeholder patterns are found in text fields.
-        RepetitiveListItemError: If duplicate or very similar items are found in lists like constraints or examples.
+    Returns:
+        List[PromptValidationError]: A list of validation errors found.
+                                     An empty list signifies that the prompt is valid.
     """
+    errors_found: List[PromptValidationError] = []
+
     if not prompt.role or not prompt.role.strip():
-        raise MissingRequiredFieldError("Role must be a non-empty string.")
+        errors_found.append(MissingRequiredFieldError("Role: Must be a non-empty string."))
 
     if not prompt.task or not prompt.task.strip():
-        raise MissingRequiredFieldError("Task must be a non-empty string.")
+        errors_found.append(MissingRequiredFieldError("Task: Must be a non-empty string."))
 
     if not prompt.context or not prompt.context.strip():
-        raise MissingRequiredFieldError("Context must be a non-empty string.")
+        errors_found.append(MissingRequiredFieldError("Context: Must be a non-empty string."))
 
     if prompt.constraints is not None:
         if not isinstance(prompt.constraints, List):
-            raise InvalidListTypeError("Constraints, if provided, must be a list.")
-        for item in prompt.constraints:
-            if not isinstance(item, str) or not item.strip():
-                raise InvalidListItemError("Each constraint must be a non-empty string.")
+            errors_found.append(InvalidListTypeError("Constraints: If provided, must be a list."))
+        else:
+            for i, item in enumerate(prompt.constraints):
+                if not isinstance(item, str) or not item.strip():
+                    errors_found.append(InvalidListItemError(f"Constraints (Item {i+1}): Must be a non-empty string."))
 
     if prompt.examples is not None:
         if not isinstance(prompt.examples, List):
-            raise InvalidListTypeError("Examples, if provided, must be a list.")
-        for item in prompt.examples:
-            if not isinstance(item, str) or not item.strip():
-                raise InvalidListItemError("Each example must be a non-empty string.")
+            errors_found.append(InvalidListTypeError("Examples: If provided, must be a list."))
+        else:
+            for i, item in enumerate(prompt.examples):
+                if not isinstance(item, str) or not item.strip():
+                    errors_found.append(InvalidListItemError(f"Examples (Item {i+1}): Must be a non-empty string."))
 
     if prompt.tags is not None and prompt.tags: # Check if tags is provided and not an empty list
         if not isinstance(prompt.tags, List):
-            raise InvalidListTypeError("Tags, if provided, must be a list.")
-        for item in prompt.tags:
-            if not isinstance(item, str) or not item.strip():
-                raise InvalidListItemError("Each tag must be a non-empty string.")
+            errors_found.append(InvalidListTypeError("Tags: If provided and not empty, must be a list."))
+        else:
+            for i, item in enumerate(prompt.tags):
+                if not isinstance(item, str) or not item.strip():
+                    errors_found.append(InvalidListItemError(f"Tags (Item {i+1}): Must be a non-empty string."))
 
     # --- Advanced GIGO Rules ---
 
@@ -74,10 +76,10 @@ def validate_prompt(prompt: PromptObject) -> None:
         if isinstance(field_value, str): # Should always be str based on PromptObject
             match = combined_placeholder_regex.search(field_value)
             if match:
-                raise UnresolvedPlaceholderError(
+                errors_found.append(UnresolvedPlaceholderError(
                     f"{field_name}: Contains unresolved placeholder text like '{match.group(0)}'. "
                     "Please replace it with specific content."
-                )
+                ))
 
     list_fields_for_placeholders = {
         "Constraints": prompt.constraints,
@@ -91,36 +93,35 @@ def validate_prompt(prompt: PromptObject) -> None:
                 if isinstance(item, str): # Items should be strings per earlier checks
                     match = combined_placeholder_regex.search(item)
                     if match:
-                        raise UnresolvedPlaceholderError(
+                        errors_found.append(UnresolvedPlaceholderError(
                             f"{field_name} (Item {index + 1}): Contains unresolved placeholder "
                             f"text like '{match.group(0)}' in '{item[:50]}...'. "
                             "Please replace it with specific content."
-                        )
+                        ))
 
     # Rule 2: Repetitive List Items
-    def check_repetitive_items(items: List[str], field_name: str):
+    def check_repetitive_items_and_collect_errors(items: List[str], field_name: str, errors_list: List[PromptValidationError]):
         if not items or len(items) < 2: # No repetition possible with 0 or 1 item
             return
 
         normalized_items = set()
         for index, item in enumerate(items):
             # Normalize by lowercasing and stripping whitespace
-            # More advanced normalization (e.g., removing punctuation) could be added if needed
             normalized_item = item.strip().lower()
             if normalized_item in normalized_items:
-                raise RepetitiveListItemError(
-                    f"{field_name}: Duplicate or very similar item found: '{item[:50]}...'. "
+                errors_list.append(RepetitiveListItemError(
+                    f"{field_name} (Item {index + 1}): Duplicate or very similar item found: '{item[:50]}...'. "
                     "Ensure each item is unique and adds distinct value."
-                )
+                ))
             normalized_items.add(normalized_item)
 
     if prompt.constraints:
-        check_repetitive_items(prompt.constraints, "Constraints")
+        check_repetitive_items_and_collect_errors(prompt.constraints, "Constraints", errors_found)
 
     if prompt.examples:
-        check_repetitive_items(prompt.examples, "Examples")
+        check_repetitive_items_and_collect_errors(prompt.examples, "Examples", errors_found)
 
     # Tags are often single words; repetition might be less of an "error" and more of a style issue.
-    # If needed, check_repetitive_items(prompt.tags, "Tags") could be added.
+    # If needed, check_repetitive_items_and_collect_errors(prompt.tags, "Tags", errors_found) could be added.
 
-    # If all checks pass, the function returns None implicitly.
+    return errors_found

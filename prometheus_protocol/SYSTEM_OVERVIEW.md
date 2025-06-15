@@ -269,6 +269,10 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Summary:** Defined `UserSettings` dataclass ([`core/user_settings.py`](./core/user_settings.py)) and implemented `UserSettingsManager` ([`core/user_settings_manager.py`](./core/user_settings_manager.py)) for file-based persistence of user preferences.
     *   **Next Steps (Future Work):** Full integration of `UserSettings` into relevant components (`JulesExecutor`, UI for theme/language, Catalysts for defaults). UI for users to view and modify their settings. Secure storage mechanisms for sensitive settings.
 
+6.  **`GIGO Guardrail (`validate_prompt`)` - Return All Errors for Granular UI Feedback:**
+    *   **Status:** **DONE (as of current iteration)**
+    *   **Summary:** The `core.guardrails.validate_prompt` function in [`core/guardrails.py`](./core/guardrails.py) has been refactored to return a `List[PromptValidationError]` instead of raising an exception on the first error. This allows for the collection and display of all GIGO validation issues for a `PromptObject` simultaneously. The `display_gigo_feedback` helper function in the `streamlit_app.py` prototype has been updated to iterate through this list and display all reported errors to the user, enhancing the comprehensiveness of validation feedback.
+
 ### B. Conceptual Features & UI
 
 1.  **`Collaboration Features` - Granular Permissions & Audit Trails (V2):**

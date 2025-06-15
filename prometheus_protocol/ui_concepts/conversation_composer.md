@@ -175,6 +175,7 @@ When a user selects a "Turn Card" from the "Turn Sequence Display/Editor Area" (
     *   All inline validation feedback mechanisms (as described in `prompt_editor.md`, Section III) function within this embedded editor context.
     *   If the user edits the `role` of the selected turn's `prompt_object` and leaves it empty, the red border and error message appear directly within this embedded editor section.
     *   The "Overall Validation Status Display" and "GIGO Guardrail Error Summary List" (described in `prompt_editor.md`, Sections IV and V) also function in the context of *this specific `PromptObject`* being edited. There might be a global validation status for the whole conversation (see Section V below on `ConversationManager` interaction) and a local one for the current turn's prompt.
+    *   Similarly, the **Risk Identifier Feedback Display** (as detailed in `prompt_editor.md`, Section VII, including the dedicated 'Risk Analysis Panel' for the current turn's prompt) is also active here, providing warnings and informational alerts specific to the `PromptObject` of the selected turn.
 
 ### B. Additional `PromptTurn`-Specific Fields
 
@@ -295,10 +296,15 @@ This section outlines how a multi-turn `Conversation` is executed and how respon
             *   A prominent global notification appears (e.g., "Cannot run conversation: Invalid prompt found in 'Turn X'. Please fix errors.").
             *   The UI automatically selects the first `PromptTurn` containing the invalid `PromptObject`, and its embedded PromptObject Editor displays the specific GIGO errors (as per `prompt_editor.md`).
         *   **Risk Identification:** `core.risk_identifier.identify_risks()` is conceptually called.
-    *   **Overall Pre-Run Summary (If Risks Found but No GIGO Errors):**
-        *   If any risks were identified across any of the turns, but no GIGO errors are present (which would block execution):
-            *   A summary of identified risks for the entire conversation might be presented to the user (e.g., in a modal dialog: "Potential risks identified in 'Turn Y' (e.g., LACK_OF_SPECIFICITY) and 'Turn Z' (e.g., KEYWORD_WATCH). Proceed with execution?").
-            *   The user is given options like "[Proceed with Run]" or "[Cancel and Review Prompts]".
+    *   **Overall Pre-Run Risk Summary (If Risks Found and No GIGO Errors):**
+        *   If `RiskIdentifier.identify_risks()` finds issues in any turn's `PromptObject`:
+            *   A modal dialog appears: "Potential Risks Identified in Conversation".
+            *   Content: "The following potential risks were found:
+                *   Turn 1 (Task: '...snippet...'): [RiskType] - [Brief Message]
+                *   Turn 3 (Context: '...snippet...'): [RiskType] - [Brief Message]
+                Please review these in the respective turns. Do you want to proceed with execution?"
+            *   Buttons: "[Proceed with Run]" and "[Cancel & Review Turns]".
+            *   Clicking "[Cancel & Review Turns]" could optionally highlight the first turn card that has an identified risk.
 4.  **Start Execution:** If all GIGO checks pass and the user (if prompted about risks) chooses to proceed, the system then calls `ConversationOrchestrator.run_full_conversation(current_conversation_object)`. The UI then transitions to show execution progress (detailed in VI.B).
 
 ### B. Displaying Execution Progress and Responses
@@ -323,8 +329,7 @@ This section outlines how a multi-turn `Conversation` is executed and how respon
                 *   If the AI response content is formatted (e.g., Markdown, code blocks), the UI should attempt to render it appropriately (e.g., display rendered Markdown, apply syntax highlighting). A "Raw Text" vs. "Rendered View" toggle could be beneficial here as well.
             *   **Turn-Specific Response Metadata:**
                 *   Clearly display key metadata for this turn's response (e.g., `Tokens Used: 85`, `Finish Reason: stop`, `Model: jules-conceptual-stub-v1-conv-dynamic`). This could be a small, labeled section.
-            *   **Feedback Collection UI for the Turn:**
-                *   The "Feedback Collection UI" (for ratings, tags, notes on the output of this specific turn, as per `output_analytics.md`) should be clearly presented here, directly associated with this turn's `AIResponse`.
+            *   The **"Feedback Collection UI"** (for ratings, tags, notes, "Used in Final Work" flag, etc., as detailed in `prometheus_protocol/ui_concepts/prompt_editor.md` Section VIII.B.3) appears here, clearly associated with this specific turn's `AIResponse` and allowing the user to provide their assessment for this particular output.
         *   **If `AIResponse.was_successful` is False:**
             *   Displays the user-friendly `AIResponse.error_message` clearly (e.g., "Network Error on this turn. Retries failed." or "Content policy violation for this turn's prompt.").
             *   Indicates if retries were attempted for this turn (e.g., "Retrying (attempt X of Y)..." if the user selects the turn while it's in a retry loop).
