@@ -21,6 +21,7 @@ This overview is intended for anyone involved in the ongoing design, development
     *   [Conversation](#conversation)
     *   [AIResponse](#airesponse)
     *   [Risk-Related Types (RiskLevel, RiskType, PotentialRisk)](#risk-related-types)
+    *   [UserSettings](#usersettings)
     *   [Core Custom Exceptions](#core-custom-exceptions)
 4.  [Core Logic Components/Managers](#4-core-logic-componentsmanagers)
     *   [GIGO Guardrail (`validate_prompt`)](#gigo-guardrail-validate_prompt)
@@ -28,6 +29,8 @@ This overview is intended for anyone involved in the ongoing design, development
     *   [TemplateManager](#templatemanager)
     *   [ConversationManager](#conversationmanager)
     *   [JulesExecutor (Conceptual Stub)](#julesexecutor-conceptual-stub)
+    *   [ConversationOrchestrator](#conversationorchestrator)
+    *   [UserSettingsManager](#usersettingsmanager)
 5.  [Key Conceptual Features (Detailed Documents)](#5-key-conceptual-features-detailed-documents)
     *   [Core Execution Logic](#core-execution-logic)
     *   [Error Handling & Recovery Strategies](#error-handling--recovery-strategies)
@@ -243,70 +246,59 @@ This section serves as a "refinement backlog," capturing potential areas for imp
 ### A. Core Logic & Data Structures
 
 1.  **`ConversationManager` - Full Versioning Implemented:**
-    *   **Status: DONE (as of current iteration)**
-    *   **Summary:**
-        *   The `Conversation` dataclass in [`core/conversation.py`](./core/conversation.py) now includes a `version: int = 1` attribute.
-        *   `ConversationManager` in [`core/conversation_manager.py`](./core/conversation_manager.py) has been fully refactored to implement versioning for conversations, mirroring the capabilities of `TemplateManager`. This includes:
-            - `save_conversation` now assigns/increments `conversation.version`, updates `last_modified_at`, and saves to versioned filenames (e.g., `name_v1.json`). It returns the updated `Conversation`.
-            - `load_conversation` can load the latest or a specific version.
-            - `list_conversations` now returns `Dict[str, List[int]]`, mapping base names to sorted lists of their available versions.
-        *   This completes the planned refinements for `ConversationManager` to provide consistent versioning across core assets.
-    *   **Next Steps (Future Work):** UI concepts in `conversation_composer.md` have been updated to reflect interaction with versioned conversations. Further UI implementation would be needed.
+    *   **Status: DONE (as of a recent iteration)**
+    *   **Summary:** The `Conversation` dataclass in [`core/conversation.py`](./core/conversation.py) now includes a `version: int = 1` attribute. `ConversationManager` in [`core/conversation_manager.py`](./core/conversation_manager.py) has been fully refactored to implement versioning for conversations, mirroring `TemplateManager`. This includes: `save_conversation` assigns/increments `conversation.version` and `last_modified_at`, saves to versioned filenames (e.g., `name_v1.json`), and returns the updated `Conversation`; `load_conversation` handles latest or specific versions; `list_conversations` returns `Dict[str, List[int]]`. This completes the planned versioning refinements for `ConversationManager`.
+    *   **Next Steps (Future Work):** UI concepts in `conversation_composer.md` have been updated to reflect interaction with versioned conversations. Further UI implementation would be needed to fully surface these capabilities.
 
 2.  **`PromptObject` - `created_by_user_id` Field Added:**
-    *   **Status: DONE**
-    *   **Summary:** Added `created_by_user_id: Optional[str] = None` to `PromptObject` ([`core/prompt.py`](./core/prompt.py)). This field allows for tracking the original creator of a prompt, which is beneficial for attribution, especially in collaborative workspace contexts.
-    *   **Serialization:** Handled in `to_dict()` and `from_dict()`. Defaults to `None` if missing in deserialized data.
-    *   **Next Steps (Future Work):** Integration with a user authentication system to automatically populate this field upon `PromptObject` creation by a logged-in user. UI concepts to display this information where relevant.
+    *   **Status: DONE (as of a recent iteration)**
+    *   **Summary:** Added `created_by_user_id: Optional[str] = None` to `PromptObject` ([`core/prompt.py`](./core/prompt.py)) for attribution. Serialization handled. Populating with actual user IDs is future work tied to user authentication.
+    *   **Next Steps (Future Work):** Integration with a user authentication system to automatically populate this field. UI concepts to display this information where relevant.
 
 3.  **`AIResponse` - Populating `source_conversation_id`:**
-    *   **Status: DONE (as of current iteration - Implemented in `ConversationOrchestrator`)**
-    *   **Summary:** The `ConversationOrchestrator.run_full_conversation` method in [`core/conversation_orchestrator.py`](./core/conversation_orchestrator.py) is now explicitly responsible for populating the `source_conversation_id` field in each `AIResponse` object generated during the execution of a conversation. This ensures proper linkage of turn responses back to the parent `Conversation`.
+    *   **Status: DONE (as of a recent iteration - Implemented in `ConversationOrchestrator`)**
+    *   **Summary:** `ConversationOrchestrator.run_full_conversation` in [`core/conversation_orchestrator.py`](./core/conversation_orchestrator.py) now populates `source_conversation_id` in each `AIResponse` during conversation execution.
 
 4.  **`PromptObject.settings` Field and `JulesExecutor` Integration for Dynamic Settings:**
-    *   **Status: DONE**
-    *   **Summary:** Added `settings: Optional[Dict[str, Any]] = None` to `PromptObject` ([`core/prompt.py`](./core/prompt.py)). The `JulesExecutor._prepare_jules_request_payload` method in ([`core/jules_executor.py`](./core/jules_executor.py)) was updated to merge these prompt-specific settings with its own defaults, allowing `PromptObject` instances to carry their preferred execution parameters (e.g., temperature, max_tokens).
-    *   **Serialization:** Handled in `PromptObject.to_dict()` and `from_dict()`.
+    *   **Status: DONE (as of a recent iteration)**
+    *   **Summary:** Added `settings: Optional[Dict[str, Any]] = None` to `PromptObject` ([`core/prompt.py`](./core/prompt.py)). `JulesExecutor` merges these with defaults. Serialization handled.
     *   **Next Steps (Future Work):** UI concepts for an "Execution Settings Panel" in the `PromptObject` editor have been added to `prompt_editor.md`. Further UI implementation would be needed.
+
+5.  **User Settings/Preferences Data Model & Basic Persistence:**
+    *   **Status: DONE (as of a recent iteration)**
+    *   **Summary:** Defined `UserSettings` dataclass ([`core/user_settings.py`](./core/user_settings.py)) and implemented `UserSettingsManager` ([`core/user_settings_manager.py`](./core/user_settings_manager.py)) for file-based persistence of user preferences.
+    *   **Next Steps (Future Work):** Full integration of `UserSettings` into relevant components (`JulesExecutor`, UI for theme/language, Catalysts for defaults). UI for users to view and modify their settings. Secure storage mechanisms for sensitive settings.
 
 ### B. Conceptual Features & UI
 
 1.  **`Collaboration Features` - Granular Permissions & Audit Trails (V2):**
-    *   **Issue:** V1 collaboration relies on workspace-level roles and has no detailed audit trails.
-    *   **Refinement:** Future versions (V2+) should explore per-item permissions within a workspace and comprehensive audit logging for changes to shared resources.
-    *   **Action:** Keep as V2+ scope in `collaboration_features.md`.
+    *   **Status: V2+ Feature / Future Conceptualization**
+    *   **Summary:** V1 collaboration concepts focus on workspace-level roles. Future versions should explore per-item permissions within workspaces and implement comprehensive audit trails for changes to shared resources.
 
 2.  **`Collaboration Features` - Merging Divergent Versions (V2):**
-    *   **Issue:** V1 handles concurrent edits by creating divergent versions (implicit branches).
-    *   **Refinement:** V2+ could explore UI and logic for comparing and merging different versions of a template/conversation.
-    *   **Action:** Keep as V2+ scope in `collaboration_features.md`.
+    *   **Status: V2+ Feature / Future Conceptualization**
+    *   **Summary:** V1 handles concurrent edits by creating divergent versions (implicit branching). Future versions could introduce UI and logic for comparing and merging these different versions of templates or conversations.
 
 3.  **`Creative Catalyst Modules` - AI Implementation Details:**
-    *   **Issue:** These are currently conceptual regarding *what* they do for the user. The *how* (e.g., would they themselves call Jules or use other NLP techniques?) is undefined.
-    *   **Refinement:** Future work would need to detail the implementation strategy for each catalyst module.
-    *   **Action:** Note as future implementation detail.
+    *   **Status: Implementation Detail for Future Development**
+    *   **Summary:** The purpose, conceptual UI integration, and user controls (like 'Creativity Level') for several Creative Catalyst Modules have been defined in [`concepts/creative_catalyst_modules.md`](./concepts/creative_catalyst_modules.md). The specific AI/NLP techniques or models to power their suggestion generation are future implementation details.
 
 4.  **`Output Analytics` - Feedback Collection UI Details:**
-    *   **Issue:** The UI for *collecting* analytics feedback is only briefly mentioned.
-    *   **Refinement:** A more detailed UI concept for the feedback form (ratings, tags, notes) that appears after AI response generation would be needed.
-    *   **Action:** Add to potential future UI refinement tasks.
+    *   **Status: Further UI Conceptualization Needed**
+    *   **Summary:** The `AnalyticsEntry` data model and high-level UI concepts for *displaying* analytics are defined in [`concepts/output_analytics.md`](./concepts/output_analytics.md). Detailed UI mockups or paper prototypes for the *feedback collection forms* (that appear after AI response generation) require further design.
 
-5.  **User Settings/Preferences Data Model & Basic Persistence:**
-    *   **Status: DONE (as of current iteration)**
-    *   **Summary:**
-        *   Defined `UserSettings` dataclass in [`core/user_settings.py`](./core/user_settings.py) for user-specific configurations (API keys, default model/execution settings, UI preferences, catalyst defaults). Includes serialization methods.
-        *   Implemented `UserSettingsManager` in [`core/user_settings_manager.py`](./core/user_settings_manager.py) for saving and loading `UserSettings` objects to/from user-specific JSON files. Includes error handling for corrupted files via `UserSettingsCorruptedError`.
-    *   **Next Steps (Future Work):**
-        *   Full integration of `UserSettings` into relevant components (`JulesExecutor` to use default API key/model/settings, Creative Catalysts to use default creativity levels, UI to use theme/language preferences).
-        *   UI for users to view and modify their settings.
-        *   Secure storage mechanisms for sensitive settings like API keys (beyond simple JSON files if deployed in a production-like environment).
+5.  **User Account Management & Global Settings (V2+):**
+    *   **Status: V2+ Major Feature Area / Future Conceptualization**
+    *   **Summary:** While the `UserSettings` dataclass and `UserSettingsManager` provide basic persistence for user preferences, a full User Account Management system (registration, login, profiles) and a comprehensive UI for managing all global user settings (including secure API key management beyond local files) are significant V2+ undertakings.
 
 ### C. Terminology & Consistency
 
 1.  **"Template Name" vs. "Base Name":**
-    *   **Issue:** `TemplateManager` methods sometimes refer to `template_name` which becomes a `base_name` after sanitization and before versioning.
-    *   **Refinement:** Ensure method parameters and internal variable names are consistently clear about whether they refer to the user-facing name or the sanitized base name.
-    *   **Action:** Review `TemplateManager` code and docstrings for consistent terminology. (This can be a minor code-level refinement).
+    *   **Status: Acknowledged; For Future Code-Level Review.**
+    *   **Summary:** The distinction between user-facing 'template/conversation name' (which can contain spaces and special characters) and the internal 'base_name' (sanitized for use in filenames before versioning suffixes are added) is noted. Current usage within `TemplateManager` and `ConversationManager` and their helpers (`_sanitize_base_name`, `_construct_filename`) is functional. Terminology in code comments, internal documentation, and potentially user-facing error messages related to filenames could be reviewed for strict consistency during any future direct refactoring of these manager modules.
+
+---
+**Overall Status of V1 Conceptual Refinements:** All critical V1 refinements identified for core data structures and manager functionalities in subsection 7.A have now been completed and documented as "DONE." Items in 7.B (Conceptual Features & UI) correctly reflect their status as being primarily for future V2+ development or deeper conceptualization. The item in 7.C (Terminology & Consistency) is acknowledged for ongoing code-level attention during future refactoring. The V1 conceptual backend architecture and its core components are now considered stable, well-documented, and internally consistent based on the completion of this review cycle.
 
 ---
 
