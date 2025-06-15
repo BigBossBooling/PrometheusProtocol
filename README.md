@@ -1,2 +1,2 @@
-# AIPet
-AI Giga Pet
+# Prometheus
+Prometheus Protocol
