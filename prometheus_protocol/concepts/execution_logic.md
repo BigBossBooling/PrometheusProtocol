@@ -70,7 +70,7 @@ A request to the Jules API to generate content would conceptually look like this
     {"speaker": "ai", "text": "The closest black hole currently known is Gaia BH1, located about 1,560 light-years away."}
   ],
   "user_preferences": { // Optional: User-level settings
-      "output_language_preference": "en-US"
+      "output_language_preference": "en-US" // Sourced from UserSettings.preferred_output_language
   }
 }
 ```
@@ -80,9 +80,9 @@ A request to the Jules API to generate content would conceptually look like this
 *   `request_id_client`: An optional ID the client can send for its own tracking.
 *   `prompt_payload`: Contains the core elements derived from our `PromptObject`.
     *   `role`, `task_description`, `context_data`, `constraints_list`, `examples_list`: Directly map from `PromptObject`.
-    *   `settings`: A dictionary for model-specific parameters like temperature, max tokens, etc. Prometheus Protocol could store preferred settings per prompt or globally.
+    *   `settings`: A dictionary for model-specific parameters (temperature, max tokens, etc.). These are determined by a hierarchy: `PromptObject.settings` override `UserSettings.default_execution_settings`, which in turn override `JulesExecutor`'s hardcoded defaults.
 *   `conversation_history`: An optional list of previous turns, each marked with `speaker` ("user" or "ai") and `text`. This is crucial for providing context in multi-turn dialogues.
-*   `user_preferences`: Optional user-level settings that might influence generation.
+*   `user_preferences`: Optional user-level settings that might influence generation (e.g., `output_language_preference` sourced from `UserSettings.preferred_output_language`).
 
 ### B. Jules Response Structure
 
@@ -153,7 +153,41 @@ This hypothetical API contract provides a basis for designing the `JulesExecutor
 ---
 *Next section: `AIResponse` Data Class.*
 
-## V. Conversation Execution Flow (Conceptual V1)
+## IV. `AIResponse` Data Class (Conceptual Definition)
+
+The `AIResponse` data class standardizes how AI outputs, metadata, and errors from the "Jules" engine are handled within Prometheus Protocol. Its detailed Python definition is in [`core/ai_response.py`](../core/ai_response.py).
+
+*   **Purpose:** To provide a consistent structure for results of AI generation attempts, whether successful or not.
+*   **Key Information Captured:** Includes the AI-generated content (if any), success/error status, error messages, linkage IDs back to the source prompt/conversation/turn, timestamps, and various metadata from the Jules API response (like token usage, model details).
+
+---
+
+## V. `JulesExecutor` Class (Conceptual)
+
+The `JulesExecutor` class is conceptually responsible for all direct interactions with the hypothetical "Google Jules" AI engine. Its Python definition with stubbed methods is in [`core/jules_executor.py`](../core/jules_executor.py).
+
+*   **Responsibilities:**
+    *   Formatting requests based on `PromptObject` or `Conversation` context.
+    *   Making HTTP calls to the Jules API endpoint (simulated in V1).
+    *   Parsing Jules API responses into `AIResponse` objects.
+    *   Basic error handling for API interactions.
+*   **Initialization (`__init__`)**:
+    *   Takes an API key and endpoint URL. The `api_key` parameter could default to a value retrieved from `UserSettings.default_jules_api_key` for the current user. The `endpoint_url` would be a system configuration.
+*   **Payload Preparation (`_prepare_jules_request_payload`)**:
+    *   This private helper method constructs the JSON payload for the Jules API.
+    *   It maps fields from `PromptObject` (role, task, context, constraints, examples) to the API's expected structure.
+    *   **Settings Hierarchy:** The execution settings (like temperature, max_tokens) sent to Jules are determined by a clear hierarchy:
+        1.  Specific settings in `PromptObject.settings` take highest precedence.
+        2.  If a setting is not in `PromptObject.settings` or is `None`, the system looks to `UserSettings.default_execution_settings`.
+        3.  If not found there, it falls back to hardcoded defaults within the `JulesExecutor` itself.
+    *   It also incorporates conversation history if provided.
+*   **Execution Methods (`execute_prompt`, `execute_conversation_turn`)**:
+    *   These methods orchestrate the call to `_prepare_jules_request_payload` and then (conceptually) make the API call.
+    *   In the V1 stub implementation, they return dynamically simulated `AIResponse` objects, capable of mimicking success or various error conditions based on the input prompt's content.
+
+---
+
+## VI. Conversation Execution Flow (Conceptual V1)
 
 This section describes how a `Conversation` object, composed of multiple `PromptTurn` instances, would be executed sequentially using the `JulesExecutor`. For V1, we assume a linear progression of turns.
 

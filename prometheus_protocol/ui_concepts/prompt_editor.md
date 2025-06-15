@@ -98,14 +98,14 @@ This panel allows users to specify common execution parameters for the hypotheti
 1.  **Temperature:**
     *   **UI Element:** Number input field or a slider.
     *   **Label:** "Temperature (e.g., 0.0 - 1.0)"
-    *   **Placeholder/Default Hint:** "Default: 0.7 (from executor)"
+    *   **Placeholder/Default Hint:** "Default: 0.7 (from User Settings, fallback to executor default)"
     *   **Description:** Controls the randomness/creativity of the AI's output. Lower values (e.g., 0.2) make the output more focused and deterministic; higher values (e.g., 0.9) make it more random and creative.
     *   **Binding (Conceptual):** `PromptObject.settings['temperature']`
 
 2.  **Max Tokens:**
     *   **UI Element:** Number input field.
     *   **Label:** "Max Tokens (e.g., 10 - 2048)"
-    *   **Placeholder/Default Hint:** "Default: 500 (from executor)"
+    *   **Placeholder/Default Hint:** "Default: 500 (from User Settings, fallback to executor default)"
     *   **Description:** Sets a limit on the maximum number of tokens (roughly words or parts of words) the AI should generate in its response.
     *   **Binding (Conceptual):** `PromptObject.settings['max_tokens']`
 
@@ -117,7 +117,15 @@ This panel allows users to specify common execution parameters for the hypotheti
 
 **Note on UI Behavior:**
 *   This panel might be collapsible or appear in an "Advanced Settings" section of the editor to keep the primary interface clean for users who don't need to adjust these parameters.
-*   Clear indication should be given if a field is left blank, implying the system/executor default will be used.
+*   Clear indication should be given if a field is left blank, implying the system/executor default will be used. Values in this panel override any defaults set in User Settings, which in turn override system-wide executor defaults.
+    *   **Top-p:** (Number input/slider) - Controls nucleus sampling.
+    *   **Top-k:** (Number input/slider) - Controls top-k sampling.
+    *   **Presence Penalty:** (Number input/slider) - Penalizes new tokens based on whether they appear in the text so far.
+    *   **Frequency Penalty:** (Number input/slider) - Penalizes new tokens based on their existing frequency in the text so far.
+
+**Note on UI Behavior:**
+*   This panel might be collapsible or appear in an "Advanced Settings" section of the editor to keep the primary interface clean for users who don't need to adjust these parameters.
+*   Clear indication should be given if a field is left blank, implying the system/executor default will be used. Values in this panel override any defaults set in User Settings, which in turn override system-wide executor defaults.
 
 ---
 *Next sections will detail GIGO Guardrail integration, validation messages, and interaction flows.*

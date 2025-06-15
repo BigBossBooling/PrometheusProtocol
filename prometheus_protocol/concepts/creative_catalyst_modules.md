@@ -190,7 +190,7 @@ This control would be most relevant for modules where the *variety* or *novelty*
 
 ### D. User Experience Considerations
 
-*   **Default Setting:** A balanced default (e.g., medium creativity) would likely be best for most users initially.
+*   **Default Setting:** A balanced default (e.g., medium creativity) would likely be best. This default could itself be a global system default, then overridden by a user's preference stored in `UserSettings.creative_catalyst_defaults` (e.g., `creative_catalyst_defaults['RolePersonaGenerator_creativity'] = 'adventurous'`), and finally, the UI control would allow session-specific overrides.
 *   **Clarity:** The UI should make it clear what the control does and how it might affect the suggestions. Tooltips or brief explanatory text could be helpful.
 *   **Persistence (Optional):** The system could remember a user's preferred creativity level for certain modules across sessions.
 

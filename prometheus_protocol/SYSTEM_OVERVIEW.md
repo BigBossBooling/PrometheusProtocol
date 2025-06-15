@@ -122,6 +122,11 @@ This section outlines the primary Python data classes and enumerations defined i
     *   **Purpose:** Represents a single potential risk identified by the `RiskIdentifier`.
     *   **Key Attributes:** `risk_type` (RiskType), `risk_level` (RiskLevel), `message`, `offending_field`, `details`.
 
+*   **`UserSettings`** ([`core/user_settings.py`](./core/user_settings.py))
+    *   **Purpose:** Stores user-specific settings and preferences for Prometheus Protocol.
+    *   **Key Attributes:** `user_id`, `default_jules_api_key`, `default_jules_model`, `default_execution_settings` (for `PromptObject`), `ui_theme`, `preferred_output_language`, `creative_catalyst_defaults`, `last_updated_at`.
+    *   **Key Methods:** `to_dict()`, `from_dict()`, `touch()`.
+
 *   **Core Custom Exceptions** ([`core/exceptions.py`](./core/exceptions.py))
     *   **Purpose:** A suite of custom exceptions used for specific error conditions within Prometheus Protocol, generally inheriting from `PromptValidationError` or `ValueError`.
     *   **Key Examples:** `PromptValidationError`, `MissingRequiredFieldError`, `UnresolvedPlaceholderError`, `RepetitiveListItemError`, `TemplateCorruptedError`, `ConversationCorruptedError`.
@@ -267,10 +272,10 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Refinement:** A more detailed UI concept for the feedback form (ratings, tags, notes) that appears after AI response generation would be needed.
     *   **Action:** Add to potential future UI refinement tasks.
 
-5.  **User Account Management & Global Settings:**
-    *   **Issue:** We've assumed users exist and have IDs, and mentioned user-level preferences (e.g., API keys for Jules).
-    *   **Refinement:** A full system would need conceptualization for user registration, login, profile management, and a place to store/manage global user settings (like API keys).
-    *   **Action:** Add "User Account Management & Settings" to list of major V2+ conceptual areas.
+5.  **User Settings/Preferences Data Model:**
+    *   **Status: DONE**
+    *   **Summary:** Defined `UserSettings` dataclass in [`core/user_settings.py`](./core/user_settings.py) to structure user-specific configurations like default API keys, preferred Jules model, default `PromptObject` execution settings, UI theme, language preferences, and creative catalyst defaults. Includes serialization methods.
+    *   **Next Steps (Future Work):** Conceptualize and implement a `UserSettingsManager` for persistence; integrate into UI for user modification; fully integrate into `JulesExecutor` and other components to use these settings.
 
 ### C. Terminology & Consistency
 
