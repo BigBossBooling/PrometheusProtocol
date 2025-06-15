@@ -216,20 +216,24 @@ The PromptObject Editor seamlessly integrates with the `TemplateManager` to allo
 4.  **Saving Operation (Conceptual):**
     *   Upon confirming a valid template name, the system conceptually calls `TemplateManager.save_template(current_prompt_object, template_name)`.
     *   `current_prompt_object` refers to the `PromptObject` instance constructed from the current state of the editor fields.
-    *   The `TemplateManager` handles the actual file system operation and name sanitization for the filename.
+    *   The `TemplateManager` handles the actual file system operation and name sanitization for the filename. The `TemplateManager.save_template` method automatically handles version incrementing if a template with the same base name already exists. The `PromptObject` instance in the editor will have its `version` and `last_modified_at` attributes updated to match the saved version.
 5.  **Feedback to User:**
-    *   On successful save: A confirmation message (e.g., "Template 'My Awesome Prompt' saved successfully!").
+    *   On successful save: A confirmation message (e.g., "Template 'My Awesome Prompt' saved as version X successfully!"). The `PromptObject` in the editor (including its displayed metadata like version and last modified at) should update to reflect the details of the saved version (as returned by `TemplateManager.save_template`).
     *   On failure (e.g., `TemplateManager` raises an error): An appropriate error message is displayed.
 
 ### B. Loading a Template
 
 1.  **User Action:** Clicks the **"[Load Template]"** button in the Actions Panel.
-2.  **Display Template List:**
-    *   A modal dialog or a dedicated view appears, listing available templates. This list is populated by conceptually calling `TemplateManager.list_templates()`.
-    *   The list should be searchable or sortable if many templates exist.
+2.  **Display Template List & Version Selection:**
+    *   A modal dialog or a dedicated view appears.
+    *   It first lists available base template names (derived from the keys of the dictionary returned by `TemplateManager.list_templates()`).
+    *   The list should be searchable or sortable.
+    *   When a user selects a base template name from this list:
+        *   If multiple versions exist for that template (from the list of versions associated with that key), the UI then presents these available version numbers (e.g., in a secondary dropdown or list: "Available versions: [1, 2, 3] - Latest: 3").
+        *   The user can select a specific version or choose an option like "Load Latest."
 3.  **User Selection:** The user selects a template from the list.
 4.  **Loading Operation (Conceptual):**
-    *   Upon selection, the system conceptually calls `TemplateManager.load_template(selected_template_name)`.
+    *   Upon selection of a base name and a specific version (or "Latest"), the system conceptually calls `TemplateManager.load_template(selected_base_name, version=selected_version_or_none_for_latest)`.
 5.  **Populate Editor:**
     *   The `PromptObject` returned by `load_template` is used to populate all the fields in the PromptObject Editor (Role, Context, Task, Constraints, Examples, Tags).
     *   Metadata fields (Prompt ID, Version, Created At, Last Modified At) are also updated from the loaded template.
