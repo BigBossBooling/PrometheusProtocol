@@ -31,3 +31,20 @@ class ConversationCorruptedError(ValueError):
     """Raised when a conversation file is corrupted, not valid JSON,
     or cannot be deserialized into a Conversation object."""
     pass
+
+# Add these classes for Advanced GIGO Guardrail Rules
+
+class UnresolvedPlaceholderError(PromptValidationError):
+    """Raised when a common placeholder pattern (e.g., [INSERT_X])
+    is found in a prompt field, indicating incomplete content."""
+    pass
+
+class RepetitiveListItemError(PromptValidationError):
+    """Raised when duplicate or very similar items are found within
+    list-based prompt fields like 'constraints' or 'examples'."""
+    pass
+
+# ConstraintConflictError deferred for V1 of advanced rules.
+# class ConstraintConflictError(PromptValidationError):
+#     """Raised when conflicting or contradictory constraints are detected."""
+#     pass

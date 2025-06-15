@@ -1,9 +1,12 @@
+import re # For placeholder regex
 from typing import List
 from .prompt import PromptObject
 from .exceptions import (
     MissingRequiredFieldError,
     InvalidListTypeError,
-    InvalidListItemError
+    InvalidListItemError,
+    UnresolvedPlaceholderError, # New
+    RepetitiveListItemError    # New
 )
 
 def validate_prompt(prompt: PromptObject) -> None:
@@ -14,6 +17,8 @@ def validate_prompt(prompt: PromptObject) -> None:
         MissingRequiredFieldError: If 'role', 'task', or 'context' are empty or whitespace.
         InvalidListTypeError: If 'constraints', 'examples', or 'tags' (if provided and not empty) are not lists.
         InvalidListItemError: If items in 'constraints', 'examples', or 'tags' (if provided and not empty) lists are not non-empty strings.
+        UnresolvedPlaceholderError: If common placeholder patterns are found in text fields.
+        RepetitiveListItemError: If duplicate or very similar items are found in lists like constraints or examples.
     """
     if not prompt.role or not prompt.role.strip():
         raise MissingRequiredFieldError("Role must be a non-empty string.")
@@ -44,5 +49,78 @@ def validate_prompt(prompt: PromptObject) -> None:
         for item in prompt.tags:
             if not isinstance(item, str) or not item.strip():
                 raise InvalidListItemError("Each tag must be a non-empty string.")
+
+    # --- Advanced GIGO Rules ---
+
+    # Rule 1: Unresolved Placeholder Detection
+    placeholder_patterns = [
+        r'\[INSERT[^]]*?\]',    # Matches [INSERT...], [INSERT_SOMETHING_HERE]
+        r'\{\{[^}]*?\}\}',      # Matches {{VARIABLE}}, {{ANY_THING}}
+        r'<[^>]*?>',              # Matches <placeholder>, <DESCRIPTION> (simple angle brackets)
+        r'YOUR_TEXT_HERE',       # Matches specific string YOUR_TEXT_HERE
+        r'PLACEHOLDER_FOR'       # Matches specific string PLACEHOLDER_FOR...
+    ]
+    # Combine patterns into one for efficiency in search
+    # We need to be careful with regex flags if patterns have different needs, but these are simple.
+    combined_placeholder_regex = re.compile("|".join(placeholder_patterns), re.IGNORECASE)
+
+    fields_to_check_for_placeholders = {
+        "Role": prompt.role,
+        "Context": prompt.context,
+        "Task": prompt.task
+    }
+
+    for field_name, field_value in fields_to_check_for_placeholders.items():
+        if isinstance(field_value, str): # Should always be str based on PromptObject
+            match = combined_placeholder_regex.search(field_value)
+            if match:
+                raise UnresolvedPlaceholderError(
+                    f"{field_name}: Contains unresolved placeholder text like '{match.group(0)}'. "
+                    "Please replace it with specific content."
+                )
+
+    list_fields_for_placeholders = {
+        "Constraints": prompt.constraints,
+        "Examples": prompt.examples
+        # Tags are usually short and less likely for complex placeholders, but could be added.
+    }
+
+    for field_name, item_list in list_fields_for_placeholders.items():
+        if item_list: # Ensure list is not None and not empty
+            for index, item in enumerate(item_list):
+                if isinstance(item, str): # Items should be strings per earlier checks
+                    match = combined_placeholder_regex.search(item)
+                    if match:
+                        raise UnresolvedPlaceholderError(
+                            f"{field_name} (Item {index + 1}): Contains unresolved placeholder "
+                            f"text like '{match.group(0)}' in '{item[:50]}...'. "
+                            "Please replace it with specific content."
+                        )
+
+    # Rule 2: Repetitive List Items
+    def check_repetitive_items(items: List[str], field_name: str):
+        if not items or len(items) < 2: # No repetition possible with 0 or 1 item
+            return
+
+        normalized_items = set()
+        for index, item in enumerate(items):
+            # Normalize by lowercasing and stripping whitespace
+            # More advanced normalization (e.g., removing punctuation) could be added if needed
+            normalized_item = item.strip().lower()
+            if normalized_item in normalized_items:
+                raise RepetitiveListItemError(
+                    f"{field_name}: Duplicate or very similar item found: '{item[:50]}...'. "
+                    "Ensure each item is unique and adds distinct value."
+                )
+            normalized_items.add(normalized_item)
+
+    if prompt.constraints:
+        check_repetitive_items(prompt.constraints, "Constraints")
+
+    if prompt.examples:
+        check_repetitive_items(prompt.examples, "Examples")
+
+    # Tags are often single words; repetition might be less of an "error" and more of a style issue.
+    # If needed, check_repetitive_items(prompt.tags, "Tags") could be added.
 
     # If all checks pass, the function returns None implicitly.

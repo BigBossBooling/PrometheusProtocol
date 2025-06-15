@@ -82,6 +82,9 @@ A global toolbar for actions related to the entire `Conversation`.
 *   **[New Conversation] Button:** Clears the composer to start a new `Conversation`.
 *   **[Load Conversation] Button:** Opens an interface to load a saved `Conversation`.
 *   **[Save Conversation] Button:** Saves the current `Conversation`.
+*   **[Run Conversation] Button:**
+    *   Initiates the sequential execution of all turns in the current `Conversation` using the `JulesExecutor`.
+    *   Responses and statuses are displayed for each turn.
 
 ### Initial State
 
@@ -270,6 +273,56 @@ This section details how the Conversation Composer interacts with the `Conversat
         *   A confirmation message (e.g., "Conversation '[Title]' saved successfully!").
         *   The `last_modified_at` field in the Conversation Metadata Panel is updated to reflect the new timestamp from the saved `Conversation` object.
     *   On failure (e.g., `ConversationManager` raises an `IOError`): An appropriate error message is displayed.
+
+---
+*End of Conversation Composer UI Concepts document.*
+
+## VI. Conversation Execution and Response Display
+
+This section outlines how a multi-turn `Conversation` is executed and how responses for each turn are displayed.
+
+### A. Initiating Conversation Execution
+*   The user clicks the **"[Run Conversation]"** button on the Main Actions Toolbar.
+*   **Pre-Execution Checks (Conceptual):**
+    *   Similar to single prompt execution, the system iterates through all `PromptTurn` objects. For each `turn.prompt_object`, it performs GIGO Guardrail validation and Risk Identification.
+    *   If any `PromptObject` has GIGO errors, execution is **blocked**. The UI guides the user to the first problematic turn (as described in Section V.C for saving).
+    *   If risks are identified, they are displayed (perhaps in a summary before execution starts), and the user can choose to proceed or cancel to revise.
+
+### B. Displaying Execution Progress and Responses
+
+1.  **Turn Sequence Display Area (Area B from Layout):**
+    *   As the conversation executes, the "Turn Cards" could visually indicate their status:
+        *   **Pending:** Default state before execution.
+        *   **Executing:** When Jules is processing this turn (e.g., a spinner icon on the card).
+        *   **Completed:** Successfully executed.
+        *   **Error:** An error occurred during execution for this turn. The card might highlight in red. Clicking it shows details in Area C. The error message from `AIResponse.error_message` could be partially visible or available on hover on an error icon on the card.
+        *   **Skipped:** If conditional logic (V2) caused this turn to be skipped.
+    *   Clicking on an executed Turn Card would still populate the "Selected Turn Detail Panel" (Area C), including any AI response received for that turn.
+
+2.  **Selected Turn Detail Panel (Area C from Layout) - Response Area:**
+    *   When a `PromptTurn` has been executed (or is being viewed after execution):
+        *   A dedicated read-only area within this panel (e.g., below the embedded PromptObject Editor for that turn) displays the `AIResponse` for that turn.
+        *   **If `AIResponse.was_successful` is True:**
+            *   Displays `AIResponse.content`.
+            *   Optionally shows response metadata (`tokens_used`, etc.).
+            *   The "Feedback Collection UI" for analytics (ratings, tags, etc.) for *this specific turn's output* appears here.
+        *   **If `AIResponse.was_successful` is False:**
+            *   Displays the user-friendly `AIResponse.error_message` clearly (e.g., "Network Error on this turn. Retries failed." or "Content policy violation for this turn's prompt.").
+            *   Indicates if retries were attempted for this turn (e.g., "Retrying (attempt X of Y)..." if the user selects the turn while it's in a retry loop).
+    *   This allows users to review the input prompt and the output for each turn side-by-side or in close proximity.
+
+3.  **Conversation Log/Transcript View (Optional V1.1/V2):**
+    *   A separate panel or view that shows the entire conversation transcript as it unfolds (User prompt 1, AI response 1, User prompt 2, AI response 2, etc.).
+    *   This would provide a continuous narrative view of the dialogue. For V1, focusing on per-turn response display in Area C is primary.
+
+### C. Post-Execution and Error Handling in Conversations
+
+*   Once all turns are processed or an unrecoverable error halts the sequence:
+    *   The user can review all responses and errors for each turn.
+    *   If the conversation was halted due to an error on a specific turn, that turn should be clearly marked as the point of failure. Subsequent turns might be marked as "Not Executed."
+    *   A global status message for the conversation execution could summarize the outcome (e.g., "Conversation completed with errors on Turn X.", "Conversation halted due to network issues on Turn Y.").
+*   Analytics feedback can still be provided for successfully executed turns' outputs.
+*   The `Conversation` object (in memory) would now ideally have references to all the `AIResponse` objects generated (though this data linkage isn't explicitly part of the `Conversation` dataclass yet, it would be managed by the orchestrating execution logic).
 
 ---
 *End of Conversation Composer UI Concepts document.*
