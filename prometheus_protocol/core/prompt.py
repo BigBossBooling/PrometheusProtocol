@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any # Added Dict, Any
 import uuid
 from datetime import datetime
 
@@ -19,6 +19,9 @@ class PromptObject:
         last_modified_at (str): ISO 8601 timestamp of the last modification (UTC).
         tags (List[str]): A list of keywords or tags for categorization.
         created_by_user_id (Optional[str]): The ID of the user who originally created this prompt object.
+        settings (Optional[Dict[str, Any]]): Optional dictionary of execution settings
+                                              (e.g., temperature, max_tokens) to override
+                                              executor defaults.
     """
     def __init__(self,
                  role: str,
@@ -31,7 +34,8 @@ class PromptObject:
                  created_at: str = None,
                  last_modified_at: str = None,
                  tags: List[str] = None,
-                 created_by_user_id: Optional[str] = None):
+                 created_by_user_id: Optional[str] = None,
+                 settings: Optional[Dict[str, Any]] = None): # New field added
         """
         Initializes the PromptObject with its core and metadata components.
 
@@ -53,6 +57,8 @@ class PromptObject:
                                         Defaults to None, which is then converted to an empty list.
             created_by_user_id (Optional[str], optional): The ID of the user who created the prompt.
                                                           Defaults to None.
+            settings (Optional[Dict[str, Any]], optional): Optional dictionary of execution settings.
+                                                            Defaults to None.
         """
         self.role: str = role
         self.context: str = context
@@ -67,6 +73,7 @@ class PromptObject:
         self.last_modified_at: str = last_modified_at if last_modified_at is not None else self.created_at
         self.tags: List[str] = tags if tags is not None else []
         self.created_by_user_id: Optional[str] = created_by_user_id
+        self.settings: Optional[Dict[str, Any]] = settings # New field initialized
 
     def to_dict(self) -> dict:
         """Serializes the PromptObject instance to a dictionary."""
@@ -81,7 +88,8 @@ class PromptObject:
             "created_at": self.created_at,
             "last_modified_at": self.last_modified_at,
             "tags": self.tags,
-            "created_by_user_id": self.created_by_user_id
+            "created_by_user_id": self.created_by_user_id,
+            "settings": self.settings # New field added to serialization
         }
 
     @classmethod
@@ -105,10 +113,11 @@ class PromptObject:
             version=data.get("version"),
             created_at=data.get("created_at"),
             last_modified_at=data.get("last_modified_at"),
-            tags=data.get("tags", []), # Ensure tags default to [] if missing in data
-            created_by_user_id=data.get("created_by_user_id")
+            tags=data.get("tags", []),
+            created_by_user_id=data.get("created_by_user_id"),
+            settings=data.get("settings") # New field added to deserialization
         )
 
-    def touch(self): # Added from previous step, ensure it's still here.
+    def touch(self):
         """Updates the last_modified_at timestamp to the current UTC time."""
         self.last_modified_at = datetime.utcnow().isoformat() + 'Z'

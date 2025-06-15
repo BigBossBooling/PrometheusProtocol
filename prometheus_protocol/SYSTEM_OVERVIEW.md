@@ -92,7 +92,7 @@ This section outlines the primary Python data classes and enumerations defined i
 
 *   **`PromptObject`** ([`core/prompt.py`](./core/prompt.py))
     *   **Purpose:** Represents a single, well-structured prompt designed for an AI model. It encapsulates all necessary components to guide AI response generation.
-    *   **Key Attributes:** `prompt_id`, `version`, `role`, `context`, `task`, `constraints`, `examples`, `tags`, `created_at`, `last_modified_at`, `created_by_user_id`.
+    *   **Key Attributes:** `prompt_id`, `version`, `role`, `context`, `task`, `constraints`, `examples`, `tags`, `created_at`, `last_modified_at`, `created_by_user_id`, `settings`.
     *   **Key Methods:** `to_dict()`, `from_dict()`, `touch()`.
 
 *   **`PromptTurn`** ([`core/conversation.py`](./core/conversation.py))
@@ -170,7 +170,7 @@ This section describes the main classes, functions, and conceptual components th
 *   **`JulesExecutor` (Conceptual Stub)** ([`core/jules_executor.py`](./core/jules_executor.py))
     *   **Responsibility:** (Conceptually) Manages all direct interaction with the hypothetical "Google Jules" AI engine. This includes formatting requests, "making API calls," and parsing responses.
     *   **Key Methods (Conceptual Stubs):**
-        *   `_prepare_jules_request_payload(prompt: PromptObject, history: Optional[List[Dict[str, str]]]) -> Dict[str, Any]`: Formats data for the Jules API.
+        *   `_prepare_jules_request_payload(prompt: PromptObject, history: Optional[List[Dict[str, str]]]) -> Dict[str, Any]`: Formats data for the Jules API, merging default execution settings with any settings provided in `PromptObject.settings`.
         *   `execute_prompt(prompt: PromptObject) -> AIResponse`: "Executes" a single prompt.
         *   `execute_conversation_turn(turn: PromptTurn, current_conversation_history: List[Dict[str, str]]) -> AIResponse`: "Executes" a single turn of a conversation.
     *   **Core Functionality (Simulated):** Prepares request dictionaries based on `PromptObject` and history. Returns dynamic, simulated `AIResponse` objects that can mimic successful outputs or various error conditions based on input characteristics.
@@ -239,10 +239,11 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Refinement:** Ensure that any conceptual `run_conversation_flow` orchestrator (as described in `execution_logic.md`) is explicitly responsible for populating this field in the `AIResponse` objects it receives for each turn.
     *   **Action:** Confirm this detail in `execution_logic.md` or related orchestrator concepts if they are further detailed.
 
-4.  **`JulesExecutor` - Dynamic Settings from `PromptObject`:**
-    *   **Issue:** The `_prepare_jules_request_payload` in `JulesExecutor` uses fixed default settings (temperature, max_tokens).
-    *   **Refinement:** Conceptualize adding a `settings: Optional[Dict[str, Any]]` field to `PromptObject`. If present, these settings would override the defaults in `JulesExecutor`. This makes prompts more self-contained regarding their execution parameters.
-    *   **Action:** Design this `settings` field for `PromptObject` and update `JulesExecutor`'s payload preparation and associated UI concepts.
+4.  **`PromptObject.settings` Field and `JulesExecutor` Integration for Dynamic Settings:**
+    *   **Status: DONE**
+    *   **Summary:** Added `settings: Optional[Dict[str, Any]] = None` to `PromptObject` ([`core/prompt.py`](./core/prompt.py)). The `JulesExecutor._prepare_jules_request_payload` method in ([`core/jules_executor.py`](./core/jules_executor.py)) was updated to merge these prompt-specific settings with its own defaults, allowing `PromptObject` instances to carry their preferred execution parameters (e.g., temperature, max_tokens).
+    *   **Serialization:** Handled in `PromptObject.to_dict()` and `from_dict()`.
+    *   **Next Steps (Future Work):** UI concepts for an "Execution Settings Panel" in the `PromptObject` editor have been added to `prompt_editor.md`. Further UI implementation would be needed.
 
 ### B. Conceptual Features & UI
 

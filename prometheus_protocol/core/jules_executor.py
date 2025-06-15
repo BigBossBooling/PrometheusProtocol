@@ -37,20 +37,37 @@ class JulesExecutor:
         """
         (Private conceptual helper) Prepares the JSON payload for the Jules API request
         based on a PromptObject and optional conversation history.
+        Prompt-specific settings override executor defaults.
 
         Args:
             prompt (PromptObject): The prompt object to derive payload from.
+                                   Its 'settings' attribute can override default execution parameters.
             history (Optional[List[Dict[str, str]]]): Simplified conversation history.
                                                      Each dict: {"speaker": "user/ai", "text": ...}
 
         Returns:
             Dict[str, Any]: The dictionary to be serialized as JSON for the Jules API request.
         """
-        # This would map PromptObject fields to the hypothetical Jules API request structure
-        # defined in execution_logic.md.
 
-        # This would map PromptObject fields to the hypothetical Jules API request structure
-        # defined in execution_logic.md.
+        # Default execution settings within the executor
+        default_executor_settings = {
+            "temperature": 0.7,
+            "max_tokens": 500,
+            "creativity_level_preference": "balanced" # From hypothetical API contract
+        }
+
+        # Start with defaults, then override with prompt-specific settings if they exist
+        final_execution_settings = default_executor_settings.copy()
+        if prompt.settings: # prompt.settings is Optional[Dict[str, Any]]
+            for key, value in prompt.settings.items():
+                if value is not None: # Only override if the prompt setting value is not None
+                    final_execution_settings[key] = value
+                # If a key from prompt.settings has a value of None,
+                # it implies "use the executor's default or don't send this setting".
+                # For simplicity here, we'll just not update if value is None,
+                # effectively keeping the default. A more complex strategy could remove the key.
+                # Or, if Jules API handles `null` for "use default", then `final_execution_settings[key] = value` is fine always.
+                # Let's assume for now we only pass non-None values from prompt.settings.
 
         prompt_payload_dict = {
             "role": prompt.role,
@@ -58,13 +75,7 @@ class JulesExecutor:
             "context_data": prompt.context,
             "constraints_list": prompt.constraints, # Assumes this is List[str]
             "examples_list": prompt.examples,       # Assumes this is List[str]
-            "settings": {
-                "temperature": 0.7,
-                "max_tokens": 500,
-                # Example of how other PromptObject metadata could be passed if Jules supported it:
-                # "source_prompt_id": prompt.prompt_id,
-                # "source_prompt_version": prompt.version
-            }
+            "settings": final_execution_settings # Use the merged settings
         }
 
         jules_request = {
@@ -74,28 +85,21 @@ class JulesExecutor:
         }
 
         if history:
-            # Ensure history is not empty if provided, though an empty list is valid for the API.
-            # No, an empty list for history is fine and means "start of conversation".
             jules_request["conversation_history"] = history
 
-        # For debugging conceptual flow:
-        # import json
-        # print(f"Conceptual Jules Request Prepared: {json.dumps(jules_request, indent=2)}")
         return jules_request
 
     def execute_prompt(self, prompt: PromptObject) -> AIResponse:
         """
         (Conceptual) Executes a single PromptObject with Jules.
+        Simulates different API responses based on prompt.task content for testing.
 
         Args:
             prompt (PromptObject): The prompt to execute.
 
         Returns:
-            AIResponse: A structured response object.
+            AIResponse: A structured response object, simulating various scenarios.
         """
-        request_payload_dict = self._prepare_jules_request_payload(prompt)
-        # client_request_id = request_payload_dict.get("request_id_client") # to pass to AIResponse
-
         # Prepare the conceptual request payload (useful for getting client_request_id)
         request_payload_dict = self._prepare_jules_request_payload(prompt)
         client_request_id = request_payload_dict.get("request_id_client")
@@ -201,6 +205,7 @@ class JulesExecutor:
         """
         (Conceptual) Executes a single PromptTurn within a Conversation with Jules,
         providing existing conversation history.
+        Simulates different API responses based on turn.prompt_object.task content.
 
         Args:
             turn (PromptTurn): The specific prompt turn to execute.
@@ -209,12 +214,8 @@ class JulesExecutor:
                 {"speaker": "user/ai", "text": ...} dictionaries.
 
         Returns:
-            AIResponse: A structured response object for this turn.
+            AIResponse: A structured response object for this turn, simulating various scenarios.
         """
-        prompt_to_execute = turn.prompt_object
-        request_payload_dict = self._prepare_jules_request_payload(prompt_to_execute, history=current_conversation_history)
-        # client_request_id = request_payload_dict.get("request_id_client")
-
         prompt_to_execute = turn.prompt_object
         # Prepare the conceptual request payload
         request_payload_dict = self._prepare_jules_request_payload(

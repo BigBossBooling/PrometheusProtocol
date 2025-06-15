@@ -91,6 +91,34 @@ This area contains buttons for performing actions related to the prompt being ed
     *   The response (content or error) is displayed in a new "Jules Response Panel."
     *   This button might be disabled if the prompt has GIGO Guardrail errors.
 
+### D. Execution Settings Panel (Optional)
+
+This panel allows users to specify common execution parameters for the hypothetical Jules AI, which would override any system defaults set by the `JulesExecutor`. If values are not set here by the user for a particular prompt, the `JulesExecutor`'s defaults for those specific parameters would apply. These settings are stored in the `PromptObject.settings` dictionary.
+
+1.  **Temperature:**
+    *   **UI Element:** Number input field or a slider.
+    *   **Label:** "Temperature (e.g., 0.0 - 1.0)"
+    *   **Placeholder/Default Hint:** "Default: 0.7 (from executor)"
+    *   **Description:** Controls the randomness/creativity of the AI's output. Lower values (e.g., 0.2) make the output more focused and deterministic; higher values (e.g., 0.9) make it more random and creative.
+    *   **Binding (Conceptual):** `PromptObject.settings['temperature']`
+
+2.  **Max Tokens:**
+    *   **UI Element:** Number input field.
+    *   **Label:** "Max Tokens (e.g., 10 - 2048)"
+    *   **Placeholder/Default Hint:** "Default: 500 (from executor)"
+    *   **Description:** Sets a limit on the maximum number of tokens (roughly words or parts of words) the AI should generate in its response.
+    *   **Binding (Conceptual):** `PromptObject.settings['max_tokens']`
+
+3.  **Other Potential Settings (Examples - V2+ or if Jules API supports):**
+    *   **Top-p:** (Number input/slider) - Controls nucleus sampling.
+    *   **Top-k:** (Number input/slider) - Controls top-k sampling.
+    *   **Presence Penalty:** (Number input/slider) - Penalizes new tokens based on whether they appear in the text so far.
+    *   **Frequency Penalty:** (Number input/slider) - Penalizes new tokens based on their existing frequency in the text so far.
+
+**Note on UI Behavior:**
+*   This panel might be collapsible or appear in an "Advanced Settings" section of the editor to keep the primary interface clean for users who don't need to adjust these parameters.
+*   Clear indication should be given if a field is left blank, implying the system/executor default will be used.
+
 ---
 *Next sections will detail GIGO Guardrail integration, validation messages, and interaction flows.*
 

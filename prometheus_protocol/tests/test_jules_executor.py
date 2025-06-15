@@ -54,6 +54,60 @@ class TestJulesExecutor(unittest.TestCase):
         self.assertIn("conversation_history", payload)
         self.assertEqual(payload["conversation_history"], history)
 
+    def test_prepare_jules_request_payload_settings_override(self):
+        """Test _prepare_jules_request_payload with various prompt.settings configurations."""
+
+        # Case 1: No settings in PromptObject, executor defaults should apply
+        prompt_no_settings = self.create_prompt_object() # Uses self.prompt_content, settings will be None
+        payload_no_settings = self.executor._prepare_jules_request_payload(prompt_no_settings)
+        request_settings_no_override = payload_no_settings["prompt_payload"]["settings"]
+        self.assertEqual(request_settings_no_override["temperature"], 0.7) # Executor default
+        self.assertEqual(request_settings_no_override["max_tokens"], 500) # Executor default
+        self.assertEqual(request_settings_no_override["creativity_level_preference"], "balanced") # Executor default
+
+        # Case 2: PromptObject with specific settings overriding some defaults
+        prompt_with_some_settings = self.create_prompt_object()
+        prompt_with_some_settings.settings = {"temperature": 0.9, "custom_param": "value123"}
+        payload_some_settings = self.executor._prepare_jules_request_payload(prompt_with_some_settings)
+        request_settings_some_override = payload_some_settings["prompt_payload"]["settings"]
+        self.assertEqual(request_settings_some_override["temperature"], 0.9) # Overridden
+        self.assertEqual(request_settings_some_override["max_tokens"], 500) # Still executor default
+        self.assertEqual(request_settings_some_override["creativity_level_preference"], "balanced") # Still executor default
+        self.assertEqual(request_settings_some_override["custom_param"], "value123") # Custom one added
+
+        # Case 3: PromptObject overriding all defaults and adding new ones
+        prompt_with_all_settings = self.create_prompt_object()
+        prompt_with_all_settings.settings = {
+            "temperature": 0.5,
+            "max_tokens": 150,
+            "creativity_level_preference": "high",
+            "another_setting": "test"
+        }
+        payload_all_settings = self.executor._prepare_jules_request_payload(prompt_with_all_settings)
+        request_settings_all_override = payload_all_settings["prompt_payload"]["settings"]
+        self.assertEqual(request_settings_all_override["temperature"], 0.5)
+        self.assertEqual(request_settings_all_override["max_tokens"], 150)
+        self.assertEqual(request_settings_all_override["creativity_level_preference"], "high")
+        self.assertEqual(request_settings_all_override["another_setting"], "test")
+
+        # Case 4: PromptObject settings with a None value for a key that has an executor default
+        # (should keep executor default as per current _prepare_jules_request_payload logic)
+        prompt_with_none_setting_val = self.create_prompt_object()
+        prompt_with_none_setting_val.settings = {"temperature": None, "max_tokens": 250}
+        payload_none_setting_val = self.executor._prepare_jules_request_payload(prompt_with_none_setting_val)
+        request_settings_none_val = payload_none_setting_val["prompt_payload"]["settings"]
+        self.assertEqual(request_settings_none_val["temperature"], 0.7) # Executor default because prompt's was None
+        self.assertEqual(request_settings_none_val["max_tokens"], 250)   # Overridden by prompt
+
+        # Case 5: PromptObject settings is an empty dictionary
+        prompt_with_empty_settings = self.create_prompt_object()
+        prompt_with_empty_settings.settings = {}
+        payload_empty_settings = self.executor._prepare_jules_request_payload(prompt_with_empty_settings)
+        request_settings_empty = payload_empty_settings["prompt_payload"]["settings"]
+        self.assertEqual(request_settings_empty["temperature"], 0.7) # Executor default
+        self.assertEqual(request_settings_empty["max_tokens"], 500) # Executor default
+        self.assertEqual(request_settings_empty["creativity_level_preference"], "balanced") # Executor default
+
     # --- Tests for execute_prompt dynamic responses ---
     def test_execute_prompt_default_success(self):
         prompt = self.create_prompt_object(task_override="A normal task.")
