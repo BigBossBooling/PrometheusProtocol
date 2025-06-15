@@ -102,7 +102,7 @@ This section outlines the primary Python data classes and enumerations defined i
 
 *   **`Conversation`** ([`core/conversation.py`](./core/conversation.py))
     *   **Purpose:** Represents a multi-turn dialogue or a sequence of `PromptTurn` objects, along with metadata for the overall conversation.
-    *   **Key Attributes:** `conversation_id`, `title`, `description`, `turns` (List[`PromptTurn`]), `created_at`, `last_modified_at`, `tags`.
+    *   **Key Attributes:** `conversation_id`, `title`, `version`, `description`, `turns` (List[`PromptTurn`]), `created_at`, `last_modified_at`, `tags`.
     *   **Key Methods:** `to_dict()`, `from_dict()`, `touch()`.
 
 *   **`AIResponse`** ([`core/ai_response.py`](./core/ai_response.py))
@@ -163,12 +163,12 @@ This section describes the main classes, functions, and conceptual components th
     *   **Produces/Consumes:** `PromptObject` instances, JSON files.
 
 *   **`ConversationManager`** ([`core/conversation_manager.py`](./core/conversation_manager.py))
-    *   **Responsibility:** Manages the persistence (saving, loading, listing) of `Conversation` objects on the file system. `Conversation` objects are not explicitly versioned by this manager in V1; saving with an existing name overwrites.
+    *   **Responsibility:** Manages the persistence (saving, loading, listing) of `Conversation` objects as versioned files on the file system.
     *   **Key Methods:**
-        *   `save_conversation(conversation: Conversation, conversation_name: str) -> Conversation`: Saves a conversation, updates its `last_modified_at` timestamp, and returns the updated `Conversation` object.
-        *   `load_conversation(conversation_name: str) -> Conversation`.
-        *   `list_conversations() -> List[str]`: Returns a list of base conversation names. Unlike `TemplateManager`, `Conversation` objects are not explicitly versioned by `ConversationManager` in the current design; saving with an existing name overwrites the file.
-    *   **Core Functionality:** Handles filename sanitization, JSON serialization/deserialization of `Conversation` objects (which include `PromptTurn` and nested `PromptObject`s).
+        *   `save_conversation(conversation: Conversation, conversation_name: str) -> Conversation`: Saves a conversation, assigning/incrementing its version number and updating `last_modified_at`. Returns the updated `Conversation`.
+        *   `load_conversation(conversation_name: str, version: Optional[int] = None) -> Conversation`: Loads the latest or a specific version of a conversation.
+        *   `list_conversations() -> Dict[str, List[int]]`: Lists all conversation base names and their available sorted versions.
+    *   **Core Functionality:** Handles filename sanitization, version number management for conversations (e.g., `basename_v1.json`, `basename_v2.json`), JSON serialization/deserialization of `Conversation` objects (which include `PromptTurn` and nested `PromptObject`s).
     *   **Operates On:** `Conversation`, file system (within its configured `conversations_dir_path`).
     *   **Produces/Consumes:** `Conversation` instances, JSON files.
 
@@ -242,20 +242,16 @@ This section serves as a "refinement backlog," capturing potential areas for imp
 
 ### A. Core Logic & Data Structures
 
-1.  **`ConversationManager` Return Types & Versioning Scope:**
-    *   **Status: Partially DONE (for `save_conversation` return type); Versioning for `Conversation` objects Deferred (as of current iteration)**
-    *   **Summary of Changes Made:**
-        *   The `save_conversation` method in [`core/conversation_manager.py`](./core/conversation_manager.py) now correctly returns the updated `Conversation` object (after its `last_modified_at` timestamp is modified by `touch()`). This aligns its behavior more closely with `TemplateManager.save_template`.
-    *   **Decision on Versioning for Conversations (Current Scope):**
-        *   `Conversation` objects do **not** currently have a `version` attribute.
-        *   `ConversationManager` does **not** implement explicit versioning logic (e.g., creating `_vX.json` files). Saving a conversation with an existing name will overwrite the existing file.
-        *   Consequently, `ConversationManager.list_conversations()` correctly continues to return `List[str]` (a list of unique base conversation names).
-    *   **Next Steps (Future Work):**
-        *   If explicit versioning for `Conversation` objects becomes a requirement, this would involve:
-            1.  Adding a `version: int` field to the `Conversation` dataclass.
-            2.  Updating `ConversationManager` to fully mirror `TemplateManager`'s versioning logic (handling `_vX.json` filenames, `_get_highest_version`, etc.).
-            3.  Changing `list_conversations()` to return `Dict[str, List[int]]`.
-        *   This is considered a separate, larger future enhancement if needed.
+1.  **`ConversationManager` - Full Versioning Implemented:**
+    *   **Status: DONE (as of current iteration)**
+    *   **Summary:**
+        *   The `Conversation` dataclass in [`core/conversation.py`](./core/conversation.py) now includes a `version: int = 1` attribute.
+        *   `ConversationManager` in [`core/conversation_manager.py`](./core/conversation_manager.py) has been fully refactored to implement versioning for conversations, mirroring the capabilities of `TemplateManager`. This includes:
+            - `save_conversation` now assigns/increments `conversation.version`, updates `last_modified_at`, and saves to versioned filenames (e.g., `name_v1.json`). It returns the updated `Conversation`.
+            - `load_conversation` can load the latest or a specific version.
+            - `list_conversations` now returns `Dict[str, List[int]]`, mapping base names to sorted lists of their available versions.
+        *   This completes the planned refinements for `ConversationManager` to provide consistent versioning across core assets.
+    *   **Next Steps (Future Work):** UI concepts in `conversation_composer.md` have been updated to reflect interaction with versioned conversations. Further UI implementation would be needed.
 
 2.  **`PromptObject` - `created_by_user_id` Field Added:**
     *   **Status: DONE**

@@ -1,10 +1,14 @@
 import json
 import os # os might not be strictly needed if only using pathlib
+import re # For version parsing
 from pathlib import Path
-from typing import List, Dict # Dict might be used later
+from typing import List, Dict, Optional, Any # Added Any for future
 
-from .conversation import Conversation
-from .exceptions import ConversationCorruptedError
+from prometheus_protocol.core.conversation import Conversation
+from prometheus_protocol.core.exceptions import ConversationCorruptedError
+# UserSettingsCorruptedError is not directly used here, but Conversation might have UserSettings in future
+# from prometheus_protocol.core.exceptions import UserSettingsCorruptedError
+
 
 class ConversationManager:
     """Manages saving, loading, and listing of Conversation instances."""
@@ -22,31 +26,14 @@ class ConversationManager:
         self.conversations_dir_path.mkdir(parents=True, exist_ok=True)
         # print(f"ConversationManager initialized. Conversations directory: {self.conversations_dir_path.resolve()}") # For debugging
 
-    def save_conversation(self, conversation: Conversation, conversation_name: str) -> Conversation:
+    def _sanitize_base_name(self, conversation_name: str) -> str:
         """
-        Saves a Conversation instance as a JSON file.
-
-        The conversation_name is sanitized to create a valid filename.
-        The conversation's 'last_modified_at' timestamp is updated before saving.
-        If a file with the sanitized name already exists, it will be overwritten.
-
-        Args:
-            conversation (Conversation): The Conversation instance to save.
-                                   Its 'last_modified_at' attribute will be updated by this method.
-            conversation_name (str): The desired name for the conversation file.
-
-        Returns:
-            Conversation: The updated Conversation instance (with its 'last_modified_at' timestamp updated).
-
-        Raises:
-            ValueError: If the conversation_name is empty, whitespace-only, or
-                        sanitizes to an empty string.
-            IOError: If there's an error writing the file to disk.
+        Sanitizes the conversation name to be used as a base for versioned filenames.
+        Raises ValueError if conversation_name is empty/whitespace or sanitizes to empty.
         """
         if not isinstance(conversation_name, str) or not conversation_name.strip():
-            raise ValueError("Conversation name cannot be empty.")
+            raise ValueError("Conversation name cannot be empty or just whitespace.")
 
-        # Basic sanitization (consistent with TemplateManager)
         # Allow alphanumeric, underscore, hyphen. Replace space with underscore.
         sanitized_name_parts = []
         for char_code in [ord(c) for c in conversation_name]:
@@ -65,112 +52,169 @@ class ConversationManager:
                 f"Conversation name '{conversation_name}' sanitized to an empty string, "
                 "please use a different name."
             )
+        return safe_name
 
-        # Update the last_modified_at timestamp before saving
-        conversation.touch()
+    def _construct_filename(self, base_name: str, version: int) -> str:
+        """Constructs a versioned filename for a conversation."""
+        return f"{base_name}_v{version}.json" # Consistent with TemplateManager
 
-        file_path = self.conversations_dir_path / f"{safe_name}.json"
+    def _get_versions_for_base_name(self, base_name: str) -> List[int]:
+        """
+        Scans the conversations directory for files matching base_name_v*.json
+        and returns a sorted list of found integer versions.
+        """
+        versions = []
+        if not self.conversations_dir_path.exists():
+            return []
+
+        pattern = re.compile(f"^{re.escape(base_name)}_v(\d+)\.json$")
+
+        for f_path in self.conversations_dir_path.iterdir():
+            if f_path.is_file():
+                match = pattern.match(f_path.name)
+                if match:
+                    try:
+                        versions.append(int(match.group(1)))
+                    except ValueError:
+                        pass
+        return sorted(versions)
+
+    def _get_highest_version(self, base_name: str) -> int:
+        """
+        Gets the highest existing version number for a given base_name.
+        Returns 0 if no versions exist.
+        """
+        versions = self._get_versions_for_base_name(base_name)
+        return versions[-1] if versions else 0
+
+    def save_conversation(self, conversation: Conversation, conversation_name: str) -> Conversation:
+        """
+        Saves a Conversation instance as a versioned JSON file.
+        Assigns a new version number (incremented from the highest existing).
+        Updates conversation.version and conversation.last_modified_at.
+
+        Args:
+            conversation (Conversation): The Conversation instance to save.
+            conversation_name (str): The base name for the conversation.
+
+        Returns:
+            Conversation: The updated Conversation instance.
+        """
+        if not isinstance(conversation, Conversation): # Keep existing type check
+            raise TypeError("Input 'conversation' must be an instance of Conversation.")
+
+        base_name = self._sanitize_base_name(conversation_name)
+
+        highest_existing_version = self._get_highest_version(base_name)
+        new_version = highest_existing_version + 1
+
+        conversation.version = new_version # Set version on the object
+        conversation.touch() # Updates last_modified_at
+
+        file_name_str = self._construct_filename(base_name, new_version)
+        file_path = self.conversations_dir_path / file_name_str
+
         conversation_data = conversation.to_dict()
 
         try:
             with file_path.open('w', encoding='utf-8') as f:
                 json.dump(conversation_data, f, indent=4)
-            # print(f"Conversation '{safe_name}' saved to {file_path}") # For debugging
         except IOError as e:
             raise IOError(
-                f"Could not save conversation to {file_path}: {e}"
+                f"Could not save conversation '{base_name}' version {new_version} to {file_path}: {e}"
             ) from e
 
-    def load_conversation(self, conversation_name: str) -> Conversation:
-        """
-        Loads a Conversation instance from a JSON file.
+        return conversation
 
-        The conversation_name is sanitized to find the corresponding filename.
+    def load_conversation(self, conversation_name: str, version: Optional[int] = None) -> Conversation:
+        """
+        Loads a Conversation from a versioned JSON file.
+        Loads latest version if 'version' is None.
 
         Args:
-            conversation_name (str): The name of the conversation file to load.
+            conversation_name (str): Base name of the conversation.
+            version (Optional[int]): Specific version to load. Defaults to latest.
 
         Returns:
             Conversation: The loaded Conversation instance.
 
         Raises:
-            FileNotFoundError: If the conversation file does not exist.
-            ConversationCorruptedError: If the file is not valid JSON or
-                                        cannot be deserialized into a Conversation object.
-            ValueError: If the conversation_name is empty, whitespace-only, or
-                        sanitizes to an empty string.
+            FileNotFoundError, ConversationCorruptedError, ValueError.
         """
-        if not isinstance(conversation_name, str) or not conversation_name.strip():
-            raise ValueError("Conversation name cannot be empty.")
+        base_name = self._sanitize_base_name(conversation_name)
 
-        # Basic sanitization (consistent with save_conversation)
-        sanitized_name_parts = []
-        for char_code in [ord(c) for c in conversation_name]:
-            if (ord('a') <= char_code <= ord('z') or
-                ord('A') <= char_code <= ord('Z') or
-                ord('0') <= char_code <= ord('9') or
-                char_code == ord('_') or char_code == ord('-')):
-                sanitized_name_parts.append(chr(char_code))
-            elif chr(char_code) == ' ': # Replace space with underscore
-                 sanitized_name_parts.append('_')
+        version_to_load: int
+        if version is None:
+            highest_version = self._get_highest_version(base_name)
+            if highest_version == 0:
+                raise FileNotFoundError(f"No versions found for conversation '{base_name}'.")
+            version_to_load = highest_version
+        else:
+            available_versions = self._get_versions_for_base_name(base_name)
+            if version not in available_versions:
+                raise FileNotFoundError(
+                    f"Version {version} for conversation '{base_name}' not found. "
+                    f"Available versions: {available_versions if available_versions else 'None'}."
+                )
+            version_to_load = version
 
-        safe_name = "".join(sanitized_name_parts)
+        file_name_str = self._construct_filename(base_name, version_to_load)
+        file_path = self.conversations_dir_path / file_name_str
 
-        if not safe_name:
-            raise ValueError(
-                f"Conversation name '{conversation_name}' sanitized to an empty string, "
-                "cannot load."
-            )
-
-        file_path = self.conversations_dir_path / f"{safe_name}.json"
-
-        if not file_path.exists():
-            raise FileNotFoundError(
-                f"Conversation '{safe_name}' (from original name '{conversation_name}') "
-                f"not found at {file_path}"
-            )
+        if not file_path.exists(): # Safeguard, should be caught by version checks
+            raise FileNotFoundError(f"Conversation file '{file_name_str}' not found at {file_path}.")
 
         try:
             with file_path.open('r', encoding='utf-8') as f:
                 data = json.load(f)
-
-            # Conversation.from_dict should handle structure validation internally
-            # or raise appropriate errors (e.g. TypeError, KeyError) if data is malformed.
-            conversation_object = Conversation.from_dict(data)
-            return conversation_object
+            conv_object = Conversation.from_dict(data)
+            # Sanity check for version consistency between filename and content (optional but good)
+            if conv_object.version != version_to_load:
+                 # This could be a specific type of ConversationCorruptedError
+                 print(f"Warning: Version mismatch for {base_name}. File parsed as v{conv_object.version}, expected v{version_to_load}.")
+                 # For strictness, one might raise an error here. For now, let's assume file content is king for version.
+                 # Or, better, trust the filename's version and ensure from_dict sets it if it's in data.
+                 # The current Conversation.from_dict uses data.get('version', 1).
+                 # If the loaded data's version is different, it's an inconsistency.
+                 # The object returned will have the version from the file's content.
+            return conv_object
         except json.JSONDecodeError as e:
-            from .exceptions import ConversationCorruptedError # Defined in step 5
-            raise ConversationCorruptedError(
-                f"Conversation file {file_path} is corrupted (not valid JSON): {e}"
-            ) from e
-        except Exception as e: # Catch other errors from Conversation.from_dict or unexpected issues
-            from .exceptions import ConversationCorruptedError # Defined in step 5
-            # This broad catch ensures any issue during deserialization beyond JSON format is caught.
-            raise ConversationCorruptedError(
-                f"Error deserializing conversation {file_path} "
-                f"(e.g., mismatched data structure or other error in from_dict): {e}"
-            ) from e
+            raise ConversationCorruptedError(f"Corrupted conversation file (invalid JSON) for '{base_name}' v{version_to_load}: {e}") from e
+        except ValueError as e:
+            raise ConversationCorruptedError(f"Invalid data structure in conversation file for '{base_name}' v{version_to_load}: {e}") from e
+        except Exception as e:
+            raise ConversationCorruptedError(f"Unexpected error loading conversation '{base_name}' v{version_to_load}: {e}") from e
 
-    def list_conversations(self) -> List[str]:
+    def list_conversations(self) -> Dict[str, List[int]]:
         """
-        Lists the names of all available conversation files.
-
-        Scans the conversations directory for .json files and returns their names
-        (without the .json extension).
+        Lists available conversations and their versions.
 
         Returns:
-            List[str]: A list of conversation names. Returns an empty list if no
-                       conversation files are found or if the directory doesn't exist
-                       (though __init__ ensures it exists).
+            Dict[str, List[int]]: Dict mapping base names to sorted lists of versions.
+                                   Example: {"my_chat": [1, 2], "project_alpha": [1]}
         """
+        conversations_with_versions: Dict[str, List[int]] = {}
+
         if not self.conversations_dir_path.exists() or            not self.conversations_dir_path.is_dir():
-            # This case should ideally not be reached if __init__ ran correctly
-            # and the directory hasn't been deleted/replaced by a file externally.
-            return []
+            return conversations_with_versions
 
-        conversation_names = []
-        for file_path in self.conversations_dir_path.iterdir():
-            if file_path.is_file() and file_path.suffix == ".json":
-                conversation_names.append(file_path.stem) # .stem gives filename without extension
+        pattern = re.compile(r"^(.*?)_v(\d+)\.json$")
 
-        return sorted(conversation_names) # Return sorted list for consistent order
+        for f_path in self.conversations_dir_path.iterdir():
+            if f_path.is_file():
+                match = pattern.match(f_path.name)
+                if match:
+                    base_name = match.group(1)
+                    try:
+                        version = int(match.group(2))
+                        if base_name not in conversations_with_versions:
+                            conversations_with_versions[base_name] = []
+                        if version not in conversations_with_versions[base_name]: # Ensure unique versions
+                             conversations_with_versions[base_name].append(version)
+                    except ValueError:
+                        pass
+
+        for base_name in conversations_with_versions:
+            conversations_with_versions[base_name].sort()
+
+        return conversations_with_versions

@@ -58,6 +58,7 @@ class Conversation:
     Attributes:
         title (str): A user-friendly title for the conversation.
         conversation_id (str): Unique identifier for the conversation. Auto-generated.
+        version (int): The version number of this conversation object, defaults to 1.
         description (Optional[str]): A brief description of the conversation's purpose.
         turns (List[PromptTurn]): An ordered list of PromptTurn objects defining the conversation flow.
         created_at (str): ISO 8601 timestamp of when the conversation was created (UTC). Auto-generated.
@@ -66,6 +67,7 @@ class Conversation:
     """
     title: str
     conversation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    version: int = 1 # New field
     description: Optional[str] = None
     turns: List[PromptTurn] = field(default_factory=list)
     # Ensure consistent ISO 8601 format with 'Z' for UTC
@@ -84,6 +86,7 @@ class Conversation:
             "conversation_id": self.conversation_id,
             "title": self.title,
             "description": self.description,
+            "version": self.version, # New line
             "turns": [turn.to_dict() for turn in self.turns], # Serialize list of PromptTurns
             "created_at": self.created_at,
             "last_modified_at": self.last_modified_at,
@@ -102,6 +105,7 @@ class Conversation:
             conversation_id=data.get("conversation_id"),
             title=data.get("title", "Untitled Conversation"), # Provide a default for title if missing
             description=data.get("description"),
+            version=data.get("version", 1), # New line
             turns=[PromptTurn.from_dict(turn_data) for turn_data in turns_data], # Deserialize list of PromptTurns
             created_at=data.get("created_at"),
             last_modified_at=data.get("last_modified_at"),

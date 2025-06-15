@@ -33,6 +33,7 @@ This panel is dedicated to the metadata of the `Conversation` itself.
     *   **Description:** Keywords for categorizing this conversation. (Bound to `Conversation.tags`)
 4.  **Read-only Information:**
     *   **Conversation ID:** (e.g., `ID: conv_abcdef-1234...`) (From `Conversation.conversation_id`)
+    *   **Version:** (e.g., `Version: 2`) (From `Conversation.version`)
     *   **Created At:** (e.g., `Created: 2023-11-01T10:00:00Z`) (From `Conversation.created_at`)
     *   **Last Modified At:** (e.g., `Modified: 2023-11-01T12:30:00Z`) (From `Conversation.last_modified_at`)
 
@@ -234,14 +235,14 @@ This section details how the Conversation Composer interacts with the `Conversat
 1.  **User Action:** Clicks the "[Load Conversation]" button on the Main Actions Toolbar.
 2.  **System Response:**
     *   (Optional: If current conversation has unsaved changes, prompt "Discard unsaved changes and load another conversation?").
-    *   A modal dialog or a dedicated view appears, listing available saved conversations. This list is populated by conceptually calling `ConversationManager.list_conversations()`.
-    *   The list should be searchable or sortable.
+    *   A modal dialog or a dedicated view appears. It first lists available base conversation names (derived from the keys of the dictionary returned by `ConversationManager.list_conversations()`). The list should be searchable or sortable.
+    *   **Version Selection:** When a user selects a base conversation name from this list, if multiple versions exist for that conversation (from the list of versions associated with that key in the `list_conversations()` dictionary), the UI then presents these available version numbers (e.g., in a secondary dropdown or list: "Available versions: [1, 2, 3] - Latest: 3"). The user can select a specific version or choose an option like "Load Latest."
 3.  **User Selection:** The user selects a conversation name from the list.
 4.  **Loading Operation (Conceptual):**
-    *   Upon selection, the system conceptually calls `ConversationManager.load_conversation(selected_conversation_name)`.
+    *   Upon selection of a base name and a specific version (or "Latest"), the system conceptually calls `ConversationManager.load_conversation(selected_base_name, version=selected_version_or_none_for_latest)`.
 5.  **Populate Composer:**
     *   The `Conversation` object returned by `load_conversation` is used to populate the entire composer:
-        *   Conversation Metadata Panel fields are updated.
+        *   Conversation Metadata Panel fields are updated. The `version` field in the Conversation Metadata Panel is also updated from the loaded conversation.
         *   The Turn Sequence Display Area is populated with Turn Cards for each `PromptTurn` in `loaded_conversation.turns`.
         *   The Selected Turn Detail Panel is typically cleared or shows information for the first turn if available.
 6.  **Feedback to User:**
@@ -270,11 +271,10 @@ This section details how the Conversation Composer interacts with the `Conversat
     *   If saving an already named conversation, this step is typically skipped unless it's a "Save As" operation.
 4.  **Saving Operation (Conceptual):**
     *   The `ConversationManager.save_conversation(current_conversation_object, conversation_name)` method is conceptually called.
-    *   The `ConversationManager` handles filename sanitization and file system operations. The `save_conversation` method also calls `current_conversation_object.touch()` to update `last_modified_at`.
+    *   The `ConversationManager` handles filename sanitization and file system operations. The `ConversationManager.save_conversation` method automatically handles version incrementing if a conversation with the same base name already exists. The `Conversation` instance in the editor will have its `version` and `last_modified_at` attributes updated to match the saved version.
 5.  **Feedback to User:**
     *   On successful save:
-        *   A confirmation message (e.g., "Conversation '[Title]' saved successfully!").
-        *   The `last_modified_at` field in the Conversation Metadata Panel is updated to reflect the new timestamp from the saved `Conversation` object.
+        *   A confirmation message (e.g., "Conversation '[Title]' saved as version X successfully!"). The `version` and `last_modified_at` fields in the Conversation Metadata Panel are updated to reflect the details of the saved version (as returned by `ConversationManager.save_conversation`).
     *   On failure (e.g., `ConversationManager` raises an `IOError`): An appropriate error message is displayed.
 
 ---

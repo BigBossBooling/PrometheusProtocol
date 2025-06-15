@@ -119,6 +119,7 @@ class TestConversation(unittest.TestCase):
         now_utc_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         self.assertAreTimestampsClose(convo.created_at, now_utc_iso)
         self.assertEqual(convo.tags, [])
+        self.assertEqual(convo.version, 1, "Default version should be 1")
 
     def test_conversation_initialization_with_values(self):
         """Test Conversation initialization with provided values."""
@@ -129,6 +130,7 @@ class TestConversation(unittest.TestCase):
         convo = Conversation(
             conversation_id=custom_id,
             title="Full Convo",
+            version=5,
             description="A detailed test conversation.",
             turns=[self.turn1, self.turn2],
             created_at=created,
@@ -137,6 +139,7 @@ class TestConversation(unittest.TestCase):
         )
         self.assertEqual(convo.conversation_id, custom_id)
         self.assertEqual(convo.title, "Full Convo")
+        self.assertEqual(convo.version, 5, "Version not set as provided")
         self.assertEqual(convo.description, "A detailed test conversation.")
         self.assertEqual(len(convo.turns), 2)
         self.assertEqual(convo.turns[0].notes, "Turn 1 notes")
@@ -146,10 +149,11 @@ class TestConversation(unittest.TestCase):
 
     def test_conversation_to_dict(self):
         """Test Conversation serialization to dictionary."""
-        convo = Conversation(title="Dict Convo", turns=[self.turn1])
+        convo = Conversation(title="Dict Convo", turns=[self.turn1], version=3)
         convo_dict = convo.to_dict()
 
         self.assertEqual(convo_dict["conversation_id"], convo.conversation_id)
+        self.assertEqual(convo_dict["version"], convo.version)
         self.assertEqual(convo_dict["title"], "Dict Convo")
         self.assertEqual(len(convo_dict["turns"]), 1)
         self.assertEqual(convo_dict["turns"][0]["notes"], self.turn1.notes)
@@ -162,6 +166,7 @@ class TestConversation(unittest.TestCase):
             "title": "Loaded Convo",
             "description": "Loaded from dict.",
             "turns": [self.turn1.to_dict(), self.turn2.to_dict()],
+            "version": 10,
             "created_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "last_modified_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "tags": ["loaded"]
@@ -172,6 +177,7 @@ class TestConversation(unittest.TestCase):
         self.assertIsInstance(convo.turns[0], PromptTurn)
         self.assertEqual(convo.turns[0].notes, self.turn1.notes)
         self.assertEqual(convo.tags, ["loaded"])
+        self.assertEqual(convo.version, 10)
 
     def test_conversation_from_dict_defaults(self):
         """Test Conversation from_dict with missing optional fields."""
@@ -186,15 +192,23 @@ class TestConversation(unittest.TestCase):
         self.assertEqual(convo.description, None)
         self.assertEqual(convo.turns, [])
         self.assertEqual(convo.tags, [])
+        self.assertEqual(convo.version, 1) # Add this for missing version in data
 
 
     def test_conversation_serialization_idempotency(self):
         """Test Conversation to_dict -> from_dict results in an equivalent object dict."""
-        original_convo = Conversation(title="Idempotent Convo", turns=[self.turn1, self.turn2], tags=["idem"])
-        convo_dict = original_convo.to_dict()
-        reconstructed_convo = Conversation.from_dict(convo_dict)
-        # Comparing dicts is more robust for dataclasses with nested mutable objects if __eq__ isn't custom
-        self.assertEqual(reconstructed_convo.to_dict(), convo_dict)
+        original_convo_v_explicit = Conversation(title="Idempotent Convo Explicit Version", turns=[self.turn1], tags=["idem_explicit"], version=7)
+        dict_v_explicit = original_convo_v_explicit.to_dict()
+        reconstructed_v_explicit = Conversation.from_dict(dict_v_explicit)
+        self.assertEqual(reconstructed_v_explicit.to_dict(), dict_v_explicit)
+
+        # Test with default version (implicitly 1)
+        original_convo_v_default = Conversation(title="Idempotent Convo Default Version", turns=[self.turn2], tags=["idem_default"])
+        # version will be 1 by default
+        dict_v_default = original_convo_v_default.to_dict()
+        reconstructed_v_default = Conversation.from_dict(dict_v_default)
+        self.assertEqual(reconstructed_v_default.to_dict(), dict_v_default)
+        self.assertEqual(reconstructed_v_default.version, 1)
 
     def test_conversation_touch_method(self):
         """Test that touch() method updates last_modified_at."""

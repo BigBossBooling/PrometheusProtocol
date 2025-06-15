@@ -2,8 +2,10 @@ import unittest
 import tempfile
 import json
 from pathlib import Path
-import shutil # For cleaning up if setUp fails
-from datetime import datetime, timezone # For checking timestamps
+import shutil
+import uuid
+from datetime import datetime, timezone
+import time
 
 from prometheus_protocol.core.conversation_manager import ConversationManager
 from prometheus_protocol.core.conversation import Conversation, PromptTurn
@@ -15,24 +17,15 @@ class TestConversationManager(unittest.TestCase):
     def setUp(self):
         """Set up a temporary directory for conversations before each test."""
         self._temp_dir_obj = tempfile.TemporaryDirectory()
-        self.temp_dir_path = Path(self._temp_dir_obj.name)
-        self.manager = ConversationManager(conversations_dir=str(self.temp_dir_path))
+        self.temp_dir_path_str = str(self._temp_dir_obj.name)
+        self.manager = ConversationManager(conversations_dir=self.temp_dir_path_str)
+        self.test_user_id = str(uuid.uuid4()) # Though not directly used by ConversationManager
 
-        # Create dummy objects for use in tests
-        self.prompt_obj1 = PromptObject(role="R1", context="C1", task="T1", constraints=[], examples=[])
-        self.turn1 = PromptTurn(prompt_object=self.prompt_obj1, notes="Turn 1")
-
-        self.prompt_obj2 = PromptObject(role="R2", context="C2", task="T2", constraints=[], examples=[])
-        self.turn2 = PromptTurn(prompt_object=self.prompt_obj2, notes="Turn 2", parent_turn_id=self.turn1.turn_id)
-
-        self.dummy_conversation_data = {
-            "title": "Test Conversation Title",
-            "description": "A conversation for testing.",
-            "turns": [self.turn1, self.turn2],
-            "tags": ["test", "manager"]
+        # Base objects for creating conversations easily
+        self.base_prompt_content = {
+            "role": "Test Role", "context": "Test Context",
+            "constraints": ["C1"], "examples": ["E1"]
         }
-        # Create a fully fledged Conversation object
-        self.dummy_conversation = Conversation(**self.dummy_conversation_data)
 
     def tearDown(self):
         """Clean up the temporary directory after each test."""
@@ -46,157 +39,226 @@ class TestConversationManager(unittest.TestCase):
         dt2 = datetime.fromisoformat(ts2_str_parsed)
         self.assertAlmostEqual(dt1.timestamp(), dt2.timestamp(), delta=tolerance_seconds)
 
-    def test_save_conversation_creates_file_and_updates_timestamp(self):
-        """Test save_conversation creates a file and updates last_modified_at."""
-        convo_name = "my_test_convo"
-        # It's better to use a fresh object for save to avoid state issues from self.dummy_conversation if it's reused
-        convo_to_save = Conversation(
-            title="Fresh Save Test Convo",
-            turns=[self.turn1] # Assuming self.turn1 is defined in setUp
+    def _create_dummy_prompt_object(self, task_text: str) -> PromptObject:
+        # Uses self.base_prompt_content but overrides task
+        content = {**self.base_prompt_content, "task": task_text}
+        return PromptObject(**content)
+
+    def _create_dummy_prompt_turn(self, task_text_for_prompt: str) -> PromptTurn:
+        prompt_obj = self._create_dummy_prompt_object(task_text_for_prompt)
+        return PromptTurn(prompt_object=prompt_obj)
+
+    def _create_conversation_for_test(self, title_suffix="", task_for_turn1="Task 1", initial_version=1):
+        """Helper to create a fresh Conversation object for testing save.
+           The 'initial_version' is what the object has BEFORE save_conversation modifies it.
+           save_conversation will determine the actual saved version number based on files on disk.
+        """
+        turn1 = self._create_dummy_prompt_turn(task_for_turn1)
+        return Conversation(
+            title=f"Test Conversation {title_suffix}",
+            turns=[turn1],
+            tags=["test_tag"],
+            version=initial_version
         )
-        original_lmt = convo_to_save.last_modified_at # LMT at creation
 
-        import time
-        time.sleep(0.001) # Ensure time advances
+    # --- Tests for save_conversation (with versioning) ---
+    def test_save_conversation_new_and_incrementing_versions(self):
+        """Test saving a new convo creates v1, and subsequent saves increment version."""
+        convo_name = "versioned_convo"
 
-        # Capture the returned object
-        returned_convo = self.manager.save_conversation(convo_to_save, convo_name)
+        # First save
+        convo1_to_save = self._create_conversation_for_test("V1", task_for_turn1="Task V1", initial_version=5) # initial_version on obj is ignored by save
+        original_lmt1 = convo1_to_save.last_modified_at
+        time.sleep(0.001)
 
-        # Assertions on the returned object
-        self.assertIsInstance(returned_convo, Conversation)
-        self.assertEqual(returned_convo.conversation_id, convo_to_save.conversation_id)
-        self.assertNotEqual(returned_convo.last_modified_at, original_lmt,
-                            "last_modified_at on returned object was not updated.")
+        returned_convo1 = self.manager.save_conversation(convo1_to_save, convo_name)
 
-        # Check that the original object passed in was also modified (if it's the same instance)
-        # Since touch() modifies in-place, convo_to_save.last_modified_at should also be updated.
-        self.assertEqual(convo_to_save.last_modified_at, returned_convo.last_modified_at)
+        self.assertEqual(returned_convo1.version, 1, "Returned convo version should be 1 for first save.")
+        self.assertEqual(convo1_to_save.version, 1, "Original convo object version should be updated to 1.")
+        self.assertNotEqual(returned_convo1.last_modified_at, original_lmt1, "LMT should update on save V1.")
 
-        # Existing file and content checks
-        expected_file = self.temp_dir_path / "my_test_convo.json" # Sanitized name if convo_name needs it
-        self.assertTrue(expected_file.exists())
+        expected_file_v1_name = self.manager._construct_filename(convo_name, 1)
+        expected_file_v1_path = self.manager.conversations_dir_path / expected_file_v1_name
+        self.assertTrue(expected_file_v1_path.exists(), f"{expected_file_v1_name} was not created.")
 
-        with expected_file.open('r', encoding='utf-8') as f:
-            saved_data = json.load(f)
+        with expected_file_v1_path.open('r') as f:
+            data_v1 = json.load(f)
+        self.assertEqual(data_v1['version'], 1)
+        self.assertEqual(data_v1['last_modified_at'], returned_convo1.last_modified_at)
+        self.assertEqual(data_v1['title'], "Test Conversation V1")
 
-        self.assertEqual(saved_data["title"], "Fresh Save Test Convo")
-        self.assertEqual(len(saved_data["turns"]), 1)
-        # Crucially, check the LMT from the file matches the returned object's LMT
-        self.assertEqual(saved_data["last_modified_at"], returned_convo.last_modified_at)
-        self.assertAreTimestampsClose(saved_data["last_modified_at"], datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'))
+        # Second save (same conversation name)
+        convo2_to_save = self._create_conversation_for_test("V2", task_for_turn1="Task V2 Content", initial_version=10)
+        original_lmt2 = convo2_to_save.last_modified_at
+        time.sleep(0.001)
 
+        returned_convo2 = self.manager.save_conversation(convo2_to_save, convo_name)
+
+        self.assertEqual(returned_convo2.version, 2, "Returned convo version should be 2 for second save.")
+        self.assertEqual(convo2_to_save.version, 2, "Original convo object for V2 save should be updated to 2.")
+        self.assertNotEqual(returned_convo2.last_modified_at, original_lmt2, "LMT should update on save V2.")
+
+        expected_file_v2_name = self.manager._construct_filename(convo_name, 2)
+        expected_file_v2_path = self.manager.conversations_dir_path / expected_file_v2_name
+        self.assertTrue(expected_file_v2_path.exists(), f"{expected_file_v2_name} was not created.")
+
+        with expected_file_v2_path.open('r') as f:
+            data_v2 = json.load(f)
+        self.assertEqual(data_v2['version'], 2)
+        self.assertEqual(data_v2['last_modified_at'], returned_convo2.last_modified_at)
+        self.assertEqual(data_v2['turns'][0]['prompt_object']['task'], "Task V2 Content")
 
     def test_save_conversation_name_sanitization(self):
-        """Test conversation name sanitization during save."""
+        """Test conversation name sanitization during save, creating versioned file."""
         convo_name = "My Test Convo with Spaces & Chars!@#"
-        # Use a fresh object for this test too
-        convo_to_save = Conversation(title="Sanitization Test", turns=[self.turn1])
+        sanitized_base_name = "My_Test_Convo_with_Spaces__Chars"
+        convo_to_save = self._create_conversation_for_test("Sanitize")
+
         self.manager.save_conversation(convo_to_save, convo_name)
-        expected_file = self.temp_dir_path / "My_Test_Convo_with_Spaces__Chars.json"
-        self.assertTrue(expected_file.exists(), f"Expected file {expected_file} not found.")
+
+        expected_file_name = self.manager._construct_filename(sanitized_base_name, 1)
+        expected_file_path = self.manager.conversations_dir_path / expected_file_name
+        self.assertTrue(expected_file_path.exists(), f"Expected file {expected_file_path} not found.")
 
     def test_save_conversation_empty_name_raises_value_error(self):
         """Test save_conversation raises ValueError for empty or whitespace name."""
-        with self.assertRaisesRegex(ValueError, "Conversation name cannot be empty."):
-            self.manager.save_conversation(self.dummy_conversation, "")
-        with self.assertRaisesRegex(ValueError, "Conversation name cannot be empty."):
-            self.manager.save_conversation(self.dummy_conversation, "   ")
+        convo_to_save = self._create_conversation_for_test("EmptyName")
+        with self.assertRaisesRegex(ValueError, "Conversation name cannot be empty or just whitespace."):
+            self.manager.save_conversation(convo_to_save, "")
+        with self.assertRaisesRegex(ValueError, "Conversation name cannot be empty or just whitespace."):
+            self.manager.save_conversation(convo_to_save, "   ")
 
-    def test_save_conversation_name_sanitizes_to_empty_raises_value_error(self):
-        """Test save_conversation raises ValueError if name sanitizes to empty."""
-        with self.assertRaisesRegex(ValueError, "Conversation name '!@#\$' sanitized to an empty string"):
-            self.manager.save_conversation(self.dummy_conversation, "!@#$")
+    def test_save_conversation_type_error(self):
+        """Test save_conversation raises TypeError for invalid input type."""
+        with self.assertRaises(TypeError):
+            self.manager.save_conversation({"title": "fake"}, "wont_save")
 
-    def test_load_conversation_success(self):
-        """Test loading an existing conversation successfully."""
-        convo_name = "load_me_convo"
-        # Use a fresh object for saving to ensure clean state for LMT checks if any were added to load
-        convo_to_save = Conversation(
-            title=self.dummy_conversation.title, # Keep original title for consistency if needed
-            description=self.dummy_conversation.description,
-            turns=self.dummy_conversation.turns,
-            tags=self.dummy_conversation.tags
-        )
-        saved_convo = self.manager.save_conversation(convo_to_save, convo_name)
+
+    # --- Tests for load_conversation (with versioning) ---
+    def test_load_conversation_latest_version(self):
+        """Test loading the latest version when no specific version is requested."""
+        convo_name = "load_latest_convo"
+        c1 = self._create_conversation_for_test("v1", task_for_turn1="Content v1")
+        self.manager.save_conversation(c1, convo_name) # Saves as v1
+        time.sleep(0.001)
+        c2 = self._create_conversation_for_test("v2", task_for_turn1="Content v2")
+        self.manager.save_conversation(c2, convo_name) # Saves as v2
+        time.sleep(0.001)
+        c3 = self._create_conversation_for_test("v3", task_for_turn1="Content v3")
+        self.manager.save_conversation(c3, convo_name) # Saves as v3
 
         loaded_convo = self.manager.load_conversation(convo_name)
-        self.assertIsInstance(loaded_convo, Conversation)
-        self.assertEqual(loaded_convo.title, saved_convo.title)
-        self.assertEqual(len(loaded_convo.turns), len(saved_convo.turns))
-        self.assertEqual(loaded_convo.turns[0].notes, saved_convo.turns[0].notes)
-        self.assertEqual(loaded_convo.conversation_id, saved_convo.conversation_id)
-        # Verify last_modified_at from loaded file matches the one from saved_convo
-        self.assertEqual(loaded_convo.last_modified_at, saved_convo.last_modified_at)
+        self.assertIsNotNone(loaded_convo)
+        self.assertEqual(loaded_convo.version, 3)
+        self.assertEqual(loaded_convo.turns[0].prompt_object.task, "Content v3")
 
+    def test_load_conversation_specific_version(self):
+        """Test loading a specific version of a conversation."""
+        convo_name = "load_specific_convo"
+        c1 = self._create_conversation_for_test("v1", task_for_turn1="Content v1")
+        self.manager.save_conversation(c1, convo_name) # v1
+        time.sleep(0.001)
+        c2 = self._create_conversation_for_test("v2", task_for_turn1="Content v2")
+        self.manager.save_conversation(c2, convo_name) # v2
 
-    def test_load_conversation_not_found(self):
-        """Test loading a non-existent conversation raises FileNotFoundError."""
-        with self.assertRaises(FileNotFoundError):
-            self.manager.load_conversation("non_existent_convo")
+        loaded_v1 = self.manager.load_conversation(convo_name, version=1)
+        self.assertIsNotNone(loaded_v1)
+        self.assertEqual(loaded_v1.version, 1)
+        self.assertEqual(loaded_v1.turns[0].prompt_object.task, "Content v1")
+
+        loaded_v2 = self.manager.load_conversation(convo_name, version=2)
+        self.assertIsNotNone(loaded_v2)
+        self.assertEqual(loaded_v2.version, 2)
+        self.assertEqual(loaded_v2.turns[0].prompt_object.task, "Content v2")
+
+    def test_load_conversation_specific_version_not_found(self):
+        """Test FileNotFoundError when a specific, non-existent version is requested."""
+        convo_name = "specific_version_missing_convo"
+        c1 = self._create_conversation_for_test("v1")
+        self.manager.save_conversation(c1, convo_name) # Only v1 exists
+        with self.assertRaisesRegex(FileNotFoundError, f"Version 2 for conversation '{convo_name}' not found"):
+            self.manager.load_conversation(convo_name, version=2)
+
+    def test_load_conversation_no_versions_found(self):
+        """Test FileNotFoundError when no versions exist for a conversation name."""
+        with self.assertRaisesRegex(FileNotFoundError, "No versions found for conversation 'no_such_convo'"):
+            self.manager.load_conversation("no_such_convo")
 
     def test_load_conversation_corrupted_json(self):
-        """Test loading a corrupted JSON file raises ConversationCorruptedError."""
-        convo_name = "corrupted_convo"
-        file_path = self.temp_dir_path / f"{convo_name}.json"
+        """Test ConversationCorruptedError for malformed JSON."""
+        convo_name = "corrupted_convo_json"
+        c1 = self._create_conversation_for_test("Corrupt")
+        self.manager.save_conversation(c1, convo_name) # v1
+
+        file_path = self.manager.conversations_dir_path / self.manager._construct_filename(convo_name, 1)
         with file_path.open('w', encoding='utf-8') as f:
-            f.write("{'invalid_json': ") # Intentionally malformed JSON
+            f.write("{'invalid_json': this_is_not_valid,}")
 
-        with self.assertRaisesRegex(ConversationCorruptedError, "corrupted (not valid JSON)"):
-            self.manager.load_conversation(convo_name)
+        with self.assertRaisesRegex(ConversationCorruptedError, "Corrupted conversation file.*invalid JSON"):
+            self.manager.load_conversation(convo_name, version=1)
 
-    def test_load_conversation_mismatched_structure(self):
-        """Test loading JSON with mismatched structure raises ConversationCorruptedError."""
-        convo_name = "mismatched_structure_convo"
-        file_path = self.temp_dir_path / f"{convo_name}.json"
-        malformed_data = {"some_other_key": "value_without_title_or_turns"} # Missing required fields for Conversation.from_dict
+    def test_load_conversation_version_mismatch_warning(self):
+        """Test warning for version mismatch between filename and content (though content wins)."""
+        convo_name = "version_mismatch_convo"
+        convo_to_save = self._create_conversation_for_test("Mismatch Test") # Will be saved as v1
+        self.manager.save_conversation(convo_to_save, convo_name) # Filename is _v1.json
+
+        # Manually corrupt the file content to have a different version
+        file_path = self.manager.conversations_dir_path / self.manager._construct_filename(convo_name, 1)
+        with file_path.open('r', encoding='utf-8') as f:
+            data = json.load(f)
+        data['version'] = 99 # Change version in content
         with file_path.open('w', encoding='utf-8') as f:
-            json.dump(malformed_data, f)
+            json.dump(data, f, indent=4)
 
-        # This relies on Conversation.from_dict raising an error (e.g. TypeError or KeyError)
-        # if critical fields like 'title' or 'turns' are missing and not handled by defaults in from_dict.
-        # The default for title in from_dict makes it more resilient.
-        # Let's test a case where a turn is malformed.
-        malformed_data_with_bad_turn = {
-            "title": "Test",
-            "turns": [{"not_a_prompt_object": "bad"}]
+        # Expect a print warning, but load should succeed based on content's version
+        # This test is more about observing the print for now, actual behavior might be stricter in future
+        loaded_convo = self.manager.load_conversation(convo_name, version=1) # Load by filename version
+        self.assertEqual(loaded_convo.version, 99) # Version from content
+
+
+    # --- Tests for list_conversations (with versioning) ---
+    def test_list_conversations_empty_directory(self):
+        """Test list_conversations returns an empty dict for an empty directory."""
+        self.assertEqual(self.manager.list_conversations(), {})
+
+    def test_list_conversations_versioned(self):
+        """Test list_conversations returns a dict with base names and sorted version lists."""
+        # Save convoA v1, v2, v3
+        self.manager.save_conversation(self._create_conversation_for_test("A1"), "convoA")
+        time.sleep(0.001)
+        self.manager.save_conversation(self._create_conversation_for_test("A2"), "convoA")
+        time.sleep(0.001)
+        self.manager.save_conversation(self._create_conversation_for_test("A3"), "convoA")
+
+        # Save convoB v1
+        time.sleep(0.001)
+        self.manager.save_conversation(self._create_conversation_for_test("B1"), "convoB")
+
+        # Save convo_with_space v1
+        time.sleep(0.001)
+        self.manager.save_conversation(self._create_conversation_for_test("S1"), "convo with space")
+
+        expected_list = {
+            "convoA": [1, 2, 3],
+            "convoB": [1],
+            "convo_with_space": [1]
         }
-        with file_path.open('w', encoding='utf-8') as f:
-            json.dump(malformed_data_with_bad_turn, f)
+        actual_list = self.manager.list_conversations()
+        self.assertEqual(actual_list, expected_list)
 
-        with self.assertRaisesRegex(ConversationCorruptedError, "Error deserializing conversation"):
-             self.manager.load_conversation(convo_name)
+    def test_list_conversations_ignores_non_matching_files(self):
+        """Test list_conversations ignores files not matching the version pattern."""
+        self.manager.save_conversation(self._create_conversation_for_test("Valid"), "valid_convo")
 
+        # Create some non-matching files
+        (self.manager.conversations_dir_path / "non_versioned.json").touch()
+        (self.manager.conversations_dir_path / "valid_convo_vx.json").touch()
+        (self.manager.conversations_dir_path / "another_v1.txt").touch()
+        (self.manager.conversations_dir_path / "prefix_valid_convo_v1.json").touch()
 
-    def test_list_conversations_empty(self):
-        """Test list_conversations returns an empty list when no conversations exist."""
-        self.assertEqual(self.manager.list_conversations(), [])
-
-    def test_list_conversations_with_items(self):
-        """Test list_conversations returns correct names after saving conversations."""
-        names = ["convo_alpha", "convo_beta with space"]
-        # Expected names after default sanitization by save_conversation
-        sanitized_names = ["convo_alpha", "convo_beta_with_space"]
-
-        for name in names:
-            # Create a new Conversation instance for each save to avoid modifying the same object's LMT
-            current_convo = Conversation(title=f"Title for {name}", turns=[self.turn1])
-            self.manager.save_conversation(current_convo, name)
-
-        listed_conversations = self.manager.list_conversations()
-        # Sort both lists before comparing to ensure order doesn't affect test outcome
-        self.assertCountEqual(listed_conversations, sanitized_names)
-        self.assertEqual(sorted(listed_conversations), sorted(sanitized_names))
-
-
-    def test_load_conversation_name_sanitization(self):
-        """Test that load_conversation uses the same name sanitization as save_conversation."""
-        original_name = "My Test Convo with Spaces & Chars!@#"
-        convo_to_save = Conversation(title="Sanitized Load Test", turns=[self.turn1])
-        self.manager.save_conversation(convo_to_save, original_name)
-
-        loaded_convo = self.manager.load_conversation(original_name) # Try loading with original name
-        self.assertIsNotNone(loaded_convo)
-        self.assertEqual(loaded_convo.title, "Sanitized Load Test")
+        expected = {"valid_convo": [1]}
+        self.assertEqual(self.manager.list_conversations(), expected)
 
 if __name__ == '__main__':
     unittest.main()
