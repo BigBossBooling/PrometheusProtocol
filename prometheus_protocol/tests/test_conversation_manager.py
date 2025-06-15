@@ -49,37 +49,49 @@ class TestConversationManager(unittest.TestCase):
     def test_save_conversation_creates_file_and_updates_timestamp(self):
         """Test save_conversation creates a file and updates last_modified_at."""
         convo_name = "my_test_convo"
-        original_lmt = self.dummy_conversation.last_modified_at
-
-        # Ensure some time might pass if system clock resolution is low
-        # Alternatively, set last_modified_at to a known past time before saving
-        # For this test, we rely on touch() making it different from initial creation time
-        # if saved quickly after creation. A more robust way is to set it manually to an older date.
-        # self.dummy_conversation.last_modified_at = "2000-01-01T00:00:00Z"
-        # original_lmt = self.dummy_conversation.last_modified_at
+        # It's better to use a fresh object for save to avoid state issues from self.dummy_conversation if it's reused
+        convo_to_save = Conversation(
+            title="Fresh Save Test Convo",
+            turns=[self.turn1] # Assuming self.turn1 is defined in setUp
+        )
+        original_lmt = convo_to_save.last_modified_at # LMT at creation
 
         import time
-        time.sleep(0.001) # Introduce small delay to ensure timestamp can change
+        time.sleep(0.001) # Ensure time advances
 
-        self.manager.save_conversation(self.dummy_conversation, convo_name)
+        # Capture the returned object
+        returned_convo = self.manager.save_conversation(convo_to_save, convo_name)
 
-        expected_file = self.temp_dir_path / "my_test_convo.json"
+        # Assertions on the returned object
+        self.assertIsInstance(returned_convo, Conversation)
+        self.assertEqual(returned_convo.conversation_id, convo_to_save.conversation_id)
+        self.assertNotEqual(returned_convo.last_modified_at, original_lmt,
+                            "last_modified_at on returned object was not updated.")
+
+        # Check that the original object passed in was also modified (if it's the same instance)
+        # Since touch() modifies in-place, convo_to_save.last_modified_at should also be updated.
+        self.assertEqual(convo_to_save.last_modified_at, returned_convo.last_modified_at)
+
+        # Existing file and content checks
+        expected_file = self.temp_dir_path / "my_test_convo.json" # Sanitized name if convo_name needs it
         self.assertTrue(expected_file.exists())
 
         with expected_file.open('r', encoding='utf-8') as f:
             saved_data = json.load(f)
 
-        self.assertEqual(saved_data["title"], self.dummy_conversation_data["title"])
-        self.assertEqual(len(saved_data["turns"]), 2)
-        self.assertEqual(saved_data["turns"][0]["notes"], self.turn1.notes)
-        self.assertNotEqual(saved_data["last_modified_at"], original_lmt, "last_modified_at was not updated.")
+        self.assertEqual(saved_data["title"], "Fresh Save Test Convo")
+        self.assertEqual(len(saved_data["turns"]), 1)
+        # Crucially, check the LMT from the file matches the returned object's LMT
+        self.assertEqual(saved_data["last_modified_at"], returned_convo.last_modified_at)
         self.assertAreTimestampsClose(saved_data["last_modified_at"], datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'))
 
 
     def test_save_conversation_name_sanitization(self):
         """Test conversation name sanitization during save."""
         convo_name = "My Test Convo with Spaces & Chars!@#"
-        self.manager.save_conversation(self.dummy_conversation, convo_name)
+        # Use a fresh object for this test too
+        convo_to_save = Conversation(title="Sanitization Test", turns=[self.turn1])
+        self.manager.save_conversation(convo_to_save, convo_name)
         expected_file = self.temp_dir_path / "My_Test_Convo_with_Spaces__Chars.json"
         self.assertTrue(expected_file.exists(), f"Expected file {expected_file} not found.")
 
@@ -98,14 +110,24 @@ class TestConversationManager(unittest.TestCase):
     def test_load_conversation_success(self):
         """Test loading an existing conversation successfully."""
         convo_name = "load_me_convo"
-        self.manager.save_conversation(self.dummy_conversation, convo_name)
+        # Use a fresh object for saving to ensure clean state for LMT checks if any were added to load
+        convo_to_save = Conversation(
+            title=self.dummy_conversation.title, # Keep original title for consistency if needed
+            description=self.dummy_conversation.description,
+            turns=self.dummy_conversation.turns,
+            tags=self.dummy_conversation.tags
+        )
+        saved_convo = self.manager.save_conversation(convo_to_save, convo_name)
 
         loaded_convo = self.manager.load_conversation(convo_name)
         self.assertIsInstance(loaded_convo, Conversation)
-        self.assertEqual(loaded_convo.title, self.dummy_conversation.title)
-        self.assertEqual(len(loaded_convo.turns), len(self.dummy_conversation.turns))
-        self.assertEqual(loaded_convo.turns[0].notes, self.dummy_conversation.turns[0].notes)
-        self.assertEqual(loaded_convo.conversation_id, self.dummy_conversation.conversation_id)
+        self.assertEqual(loaded_convo.title, saved_convo.title)
+        self.assertEqual(len(loaded_convo.turns), len(saved_convo.turns))
+        self.assertEqual(loaded_convo.turns[0].notes, saved_convo.turns[0].notes)
+        self.assertEqual(loaded_convo.conversation_id, saved_convo.conversation_id)
+        # Verify last_modified_at from loaded file matches the one from saved_convo
+        self.assertEqual(loaded_convo.last_modified_at, saved_convo.last_modified_at)
+
 
     def test_load_conversation_not_found(self):
         """Test loading a non-existent conversation raises FileNotFoundError."""
@@ -169,11 +191,12 @@ class TestConversationManager(unittest.TestCase):
     def test_load_conversation_name_sanitization(self):
         """Test that load_conversation uses the same name sanitization as save_conversation."""
         original_name = "My Test Convo with Spaces & Chars!@#"
-        self.manager.save_conversation(self.dummy_conversation, original_name)
+        convo_to_save = Conversation(title="Sanitized Load Test", turns=[self.turn1])
+        self.manager.save_conversation(convo_to_save, original_name)
 
         loaded_convo = self.manager.load_conversation(original_name) # Try loading with original name
         self.assertIsNotNone(loaded_convo)
-        self.assertEqual(loaded_convo.title, self.dummy_conversation.title)
+        self.assertEqual(loaded_convo.title, "Sanitized Load Test")
 
 if __name__ == '__main__':
     unittest.main()

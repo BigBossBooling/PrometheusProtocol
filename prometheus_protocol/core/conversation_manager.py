@@ -22,7 +22,7 @@ class ConversationManager:
         self.conversations_dir_path.mkdir(parents=True, exist_ok=True)
         # print(f"ConversationManager initialized. Conversations directory: {self.conversations_dir_path.resolve()}") # For debugging
 
-    def save_conversation(self, conversation: Conversation, conversation_name: str) -> None:
+    def save_conversation(self, conversation: Conversation, conversation_name: str) -> Conversation:
         """
         Saves a Conversation instance as a JSON file.
 
@@ -32,7 +32,11 @@ class ConversationManager:
 
         Args:
             conversation (Conversation): The Conversation instance to save.
+                                   Its 'last_modified_at' attribute will be updated by this method.
             conversation_name (str): The desired name for the conversation file.
+
+        Returns:
+            Conversation: The updated Conversation instance (with its 'last_modified_at' timestamp updated).
 
         Raises:
             ValueError: If the conversation_name is empty, whitespace-only, or

@@ -163,11 +163,11 @@ This section describes the main classes, functions, and conceptual components th
     *   **Produces/Consumes:** `PromptObject` instances, JSON files.
 
 *   **`ConversationManager`** ([`core/conversation_manager.py`](./core/conversation_manager.py))
-    *   **Responsibility:** Manages the persistence (saving, loading, listing) of `Conversation` objects on the file system. (Currently designed with implicit versioning similar to `TemplateManager` if names collide, though `Conversation` itself doesn't have a `version` field yet - this could be a point for the "Refinement" section).
+    *   **Responsibility:** Manages the persistence (saving, loading, listing) of `Conversation` objects on the file system. `Conversation` objects are not explicitly versioned by this manager in V1; saving with an existing name overwrites.
     *   **Key Methods:**
-        *   `save_conversation(conversation: Conversation, conversation_name: str) -> None` (Note: plan had this return `None`, but for consistency with `TemplateManager` and updating `last_modified_at`, returning `Conversation` might be better - add to "Refinement" section).
+        *   `save_conversation(conversation: Conversation, conversation_name: str) -> Conversation`: Saves a conversation, updates its `last_modified_at` timestamp, and returns the updated `Conversation` object.
         *   `load_conversation(conversation_name: str) -> Conversation`.
-        *   `list_conversations() -> List[str]` (Note: plan had this return `List[str]`. To be consistent with `TemplateManager` versioning, if conversations become versioned, this would change to `Dict[str, List[int]]` - add to "Refinement" section).
+        *   `list_conversations() -> List[str]`: Returns a list of base conversation names. Unlike `TemplateManager`, `Conversation` objects are not explicitly versioned by `ConversationManager` in the current design; saving with an existing name overwrites the file.
     *   **Core Functionality:** Handles filename sanitization, JSON serialization/deserialization of `Conversation` objects (which include `PromptTurn` and nested `PromptObject`s).
     *   **Operates On:** `Conversation`, file system (within its configured `conversations_dir_path`).
     *   **Produces/Consumes:** `Conversation` instances, JSON files.
@@ -226,12 +226,20 @@ This section serves as a "refinement backlog," capturing potential areas for imp
 
 ### A. Core Logic & Data Structures
 
-1.  **`ConversationManager` Versioning & Return Types:**
-    *   **Issue:** The `ConversationManager.save_conversation` method currently returns `None`, and `list_conversations` returns `List[str]`.
-    *   **Refinement:** Consider aligning these with `TemplateManager` for consistency:
-        *   `save_conversation` could return the updated `Conversation` object (especially as its `last_modified_at` is updated by `touch()`).
-        *   If conversations were to be explicitly versioned like `PromptObject` templates (currently they are not, `Conversation` has no `version` field yet), `list_conversations` would need to return `Dict[str, List[int]]`. This depends on whether explicit versioning for `Conversation` objects themselves becomes a requirement. For now, filenames might collide and be overwritten if not uniquely named, unlike versioned `PromptObjects`.
-    *   **Action:** Re-evaluate if `Conversation` objects need a `version` attribute and if `ConversationManager` should fully mirror `TemplateManager`'s versioning logic.
+1.  **`ConversationManager` Return Types & Versioning Scope:**
+    *   **Status: Partially DONE (for `save_conversation` return type); Versioning for `Conversation` objects Deferred (as of current iteration)**
+    *   **Summary of Changes Made:**
+        *   The `save_conversation` method in [`core/conversation_manager.py`](./core/conversation_manager.py) now correctly returns the updated `Conversation` object (after its `last_modified_at` timestamp is modified by `touch()`). This aligns its behavior more closely with `TemplateManager.save_template`.
+    *   **Decision on Versioning for Conversations (Current Scope):**
+        *   `Conversation` objects do **not** currently have a `version` attribute.
+        *   `ConversationManager` does **not** implement explicit versioning logic (e.g., creating `_vX.json` files). Saving a conversation with an existing name will overwrite the existing file.
+        *   Consequently, `ConversationManager.list_conversations()` correctly continues to return `List[str]` (a list of unique base conversation names).
+    *   **Next Steps (Future Work):**
+        *   If explicit versioning for `Conversation` objects becomes a requirement, this would involve:
+            1.  Adding a `version: int` field to the `Conversation` dataclass.
+            2.  Updating `ConversationManager` to fully mirror `TemplateManager`'s versioning logic (handling `_vX.json` filenames, `_get_highest_version`, etc.).
+            3.  Changing `list_conversations()` to return `Dict[str, List[int]]`.
+        *   This is considered a separate, larger future enhancement if needed.
 
 2.  **`PromptObject` - `created_by_user_id` Field Added:**
     *   **Status: DONE**
