@@ -185,21 +185,25 @@ The `run_conversation_flow` process would iterate through the `Conversation.turn
     *   **c. Store the `AIResponse`:** Associate this `AIResponse` with the current `PromptTurn` (e.g., in a dictionary mapping `turn_id` to `AIResponse`).
 
     *   **d. Update `current_conversation_history`:**
-        *   Append the user's part of the current turn to history:
+        *   **User's Turn:** Append the user's contribution for the current turn to the history. For V1 simulation and simplicity, the `turn.prompt_object.task` is a reasonable representation of the user's directive for that turn.
+            *   *Conceptual Note:* A more complete representation for the "user" turn in history could eventually include a summary of role/context if they significantly change and are meant to be "spoken" or "established" as part of that turn's input to the AI. However, for typical chat history, the primary new instruction/query (`task`) is key.
             ```
             current_conversation_history.append({
                 "speaker": "user",
-                "text": turn.prompt_object.task # Or a more complete representation if needed
+                "text": turn.prompt_object.task
             })
             ```
-        *   If the AI execution was successful (`ai_response.was_successful` is True and `ai_response.content` exists):
-            ```
-            current_conversation_history.append({
-                "speaker": "ai",
-                "text": ai_response.content
-            })
-            ```
-        *   If the AI execution failed, decide how/if to represent this in history (e.g., an "ai_error" entry or omit). For V1, we might just log the error and potentially halt if it's critical.
+        *   **AI's Turn:**
+            *   If the AI execution was successful (`ai_response.was_successful` is True and `ai_response.content` is not None):
+                ```
+                current_conversation_history.append({
+                    "speaker": "ai",
+                    "text": ai_response.content
+                })
+                ```
+            *   If the AI execution was **not** successful (`ai_response.was_successful == False`):
+                *   For V1, we will **not** add an entry for the AI's response to the `current_conversation_history`. The error is captured in the `AIResponse` object for that turn and should be handled by the orchestrator (e.g., potentially halting the conversation, logging the error). Adding AI error messages directly into the *history sent to Jules for subsequent turns* might confuse the AI or lead to undesirable cascading error discussions. The focus of the history is the successful dialogue flow.
+                *   The UI should still clearly indicate that an error occurred for this turn, using the `AIResponse.error_message`.
 
     *   **e. Handle AI Errors:**
         *   If `ai_response.was_successful` is False, the `run_conversation_flow` might:
