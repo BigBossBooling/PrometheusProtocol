@@ -48,3 +48,9 @@ class RepetitiveListItemError(PromptValidationError):
 # class ConstraintConflictError(PromptValidationError):
 #     """Raised when conflicting or contradictory constraints are detected."""
 #     pass
+
+# Add this class for UserSettingsManager
+class UserSettingsCorruptedError(ValueError):
+    """Raised when user settings data is found to be corrupted,
+    improperly formatted, or inconsistent (e.g., user_id mismatch)."""
+    pass

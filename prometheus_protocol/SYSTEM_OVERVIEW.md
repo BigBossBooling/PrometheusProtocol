@@ -129,7 +129,7 @@ This section outlines the primary Python data classes and enumerations defined i
 
 *   **Core Custom Exceptions** ([`core/exceptions.py`](./core/exceptions.py))
     *   **Purpose:** A suite of custom exceptions used for specific error conditions within Prometheus Protocol, generally inheriting from `PromptValidationError` or `ValueError`.
-    *   **Key Examples:** `PromptValidationError`, `MissingRequiredFieldError`, `UnresolvedPlaceholderError`, `RepetitiveListItemError`, `TemplateCorruptedError`, `ConversationCorruptedError`.
+    *   **Key Examples:** `PromptValidationError`, `MissingRequiredFieldError`, `UnresolvedPlaceholderError`, `RepetitiveListItemError`, `TemplateCorruptedError`, `ConversationCorruptedError`, `UserSettingsCorruptedError`.
     *   **Note:** Each exception typically carries a message describing the specific issue.
 
 ---
@@ -188,6 +188,15 @@ This section describes the main classes, functions, and conceptual components th
     *   **Core Functionality:** Iterates through `PromptTurn`s in a `Conversation`, calls `JulesExecutor.execute_conversation_turn` for each, manages the `conversation_history` list passed between turns, populates `AIResponse.source_conversation_id`, and collects all `AIResponse` objects. For V1, halts execution on the first turn that results in an error.
     *   **Operates On:** `Conversation`, `JulesExecutor`.
     *   **Produces:** `Dict[str, AIResponse]` (mapping turn IDs to their responses).
+
+*   **`UserSettingsManager`** ([`core/user_settings_manager.py`](./core/user_settings_manager.py))
+    *   **Responsibility:** Manages the persistence (saving and loading) of `UserSettings` objects to the file system. Each user's settings are stored in a dedicated JSON file.
+    *   **Key Methods:**
+        *   `save_settings(settings: UserSettings) -> UserSettings`: Saves a user's settings, updates `last_updated_at`, and returns the updated object.
+        *   `load_settings(user_id: str) -> Optional[UserSettings]`: Loads a user's settings; returns `None` if not found.
+    *   **Core Functionality:** Handles user-specific file path generation, JSON serialization/deserialization of `UserSettings` objects, and error handling for corrupted settings files (raises `UserSettingsCorruptedError`).
+    *   **Operates On:** `UserSettings`, file system (within its configured `settings_base_dir_path`).
+    *   **Produces/Consumes:** `UserSettings` instances, JSON files.
 
 ---
 
@@ -286,10 +295,15 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Refinement:** A more detailed UI concept for the feedback form (ratings, tags, notes) that appears after AI response generation would be needed.
     *   **Action:** Add to potential future UI refinement tasks.
 
-5.  **User Settings/Preferences Data Model:**
-    *   **Status: DONE**
-    *   **Summary:** Defined `UserSettings` dataclass in [`core/user_settings.py`](./core/user_settings.py) to structure user-specific configurations like default API keys, preferred Jules model, default `PromptObject` execution settings, UI theme, language preferences, and creative catalyst defaults. Includes serialization methods.
-    *   **Next Steps (Future Work):** Conceptualize and implement a `UserSettingsManager` for persistence; integrate into UI for user modification; fully integrate into `JulesExecutor` and other components to use these settings.
+5.  **User Settings/Preferences Data Model & Basic Persistence:**
+    *   **Status: DONE (as of current iteration)**
+    *   **Summary:**
+        *   Defined `UserSettings` dataclass in [`core/user_settings.py`](./core/user_settings.py) for user-specific configurations (API keys, default model/execution settings, UI preferences, catalyst defaults). Includes serialization methods.
+        *   Implemented `UserSettingsManager` in [`core/user_settings_manager.py`](./core/user_settings_manager.py) for saving and loading `UserSettings` objects to/from user-specific JSON files. Includes error handling for corrupted files via `UserSettingsCorruptedError`.
+    *   **Next Steps (Future Work):**
+        *   Full integration of `UserSettings` into relevant components (`JulesExecutor` to use default API key/model/settings, Creative Catalysts to use default creativity levels, UI to use theme/language preferences).
+        *   UI for users to view and modify their settings.
+        *   Secure storage mechanisms for sensitive settings like API keys (beyond simple JSON files if deployed in a production-like environment).
 
 ### C. Terminology & Consistency
 
