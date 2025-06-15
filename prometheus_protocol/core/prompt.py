@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime
 
@@ -18,6 +18,7 @@ class PromptObject:
         created_at (str): ISO 8601 timestamp of when the prompt was created (UTC).
         last_modified_at (str): ISO 8601 timestamp of the last modification (UTC).
         tags (List[str]): A list of keywords or tags for categorization.
+        created_by_user_id (Optional[str]): The ID of the user who originally created this prompt object.
     """
     def __init__(self,
                  role: str,
@@ -29,7 +30,8 @@ class PromptObject:
                  version: int = 1,
                  created_at: str = None,
                  last_modified_at: str = None,
-                 tags: List[str] = None):
+                 tags: List[str] = None,
+                 created_by_user_id: Optional[str] = None):
         """
         Initializes the PromptObject with its core and metadata components.
 
@@ -49,6 +51,8 @@ class PromptObject:
                                               Auto-generated if not provided. Defaults to None.
             tags (List[str], optional): A list of keywords or tags for categorization.
                                         Defaults to None, which is then converted to an empty list.
+            created_by_user_id (Optional[str], optional): The ID of the user who created the prompt.
+                                                          Defaults to None.
         """
         self.role: str = role
         self.context: str = context
@@ -62,6 +66,7 @@ class PromptObject:
         self.created_at: str = created_at if created_at is not None else current_time_iso
         self.last_modified_at: str = last_modified_at if last_modified_at is not None else self.created_at
         self.tags: List[str] = tags if tags is not None else []
+        self.created_by_user_id: Optional[str] = created_by_user_id
 
     def to_dict(self) -> dict:
         """Serializes the PromptObject instance to a dictionary."""
@@ -75,7 +80,8 @@ class PromptObject:
             "version": self.version,
             "created_at": self.created_at,
             "last_modified_at": self.last_modified_at,
-            "tags": self.tags
+            "tags": self.tags,
+            "created_by_user_id": self.created_by_user_id
         }
 
     @classmethod
@@ -99,5 +105,10 @@ class PromptObject:
             version=data.get("version"),
             created_at=data.get("created_at"),
             last_modified_at=data.get("last_modified_at"),
-            tags=data.get("tags")
+            tags=data.get("tags", []), # Ensure tags default to [] if missing in data
+            created_by_user_id=data.get("created_by_user_id")
         )
+
+    def touch(self): # Added from previous step, ensure it's still here.
+        """Updates the last_modified_at timestamp to the current UTC time."""
+        self.last_modified_at = datetime.utcnow().isoformat() + 'Z'

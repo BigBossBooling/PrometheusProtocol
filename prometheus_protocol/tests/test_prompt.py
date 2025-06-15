@@ -35,12 +35,14 @@ class TestPromptObject(unittest.TestCase):
         self.assertAreTimestampsClose(prompt.created_at, now_utc_iso)
 
         self.assertEqual(prompt.tags, [])
+        self.assertIsNone(prompt.created_by_user_id, "Default created_by_user_id should be None")
 
     def test_init_provided_metadata(self):
         """Test PromptObject initialization with provided metadata values."""
         custom_id = str(uuid.uuid4())
         custom_created_at = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc).isoformat() + 'Z'
         custom_modified_at = datetime(2023, 1, 1, 13, 0, 0, tzinfo=timezone.utc).isoformat() + 'Z'
+        custom_user_id = "user_test_123"
 
         prompt = PromptObject(
             role="Test Role", context="Test Context", task="Test Task",
@@ -49,7 +51,8 @@ class TestPromptObject(unittest.TestCase):
             version=5,
             created_at=custom_created_at,
             last_modified_at=custom_modified_at,
-            tags=["custom", "test"]
+            tags=["custom", "test"],
+            created_by_user_id=custom_user_id
         )
 
         self.assertEqual(prompt.prompt_id, custom_id)
@@ -57,19 +60,22 @@ class TestPromptObject(unittest.TestCase):
         self.assertEqual(prompt.created_at, custom_created_at)
         self.assertEqual(prompt.last_modified_at, custom_modified_at)
         self.assertEqual(prompt.tags, ["custom", "test"])
+        self.assertEqual(prompt.created_by_user_id, custom_user_id, "created_by_user_id not set as provided")
 
     def test_to_dict_serialization(self):
         """Test the to_dict() method for correct serialization."""
         prompt = PromptObject(
             role="Serial Role", context="Serial Context", task="Serial Task",
             constraints=["SC1"], examples=["SE1"],
-            version=2, tags=["serialization"]
+            version=2, tags=["serialization"],
+            created_by_user_id="user_serializer_test"
         )
         prompt_dict = prompt.to_dict()
 
         expected_keys = [
             "role", "context", "task", "constraints", "examples",
-            "prompt_id", "version", "created_at", "last_modified_at", "tags"
+            "prompt_id", "version", "created_at", "last_modified_at", "tags",
+            "created_by_user_id"
         ]
         self.assertCountEqual(prompt_dict.keys(), expected_keys) # Checks all keys are present
 
@@ -83,12 +89,25 @@ class TestPromptObject(unittest.TestCase):
         self.assertEqual(prompt_dict["created_at"], prompt.created_at)
         self.assertEqual(prompt_dict["last_modified_at"], prompt.last_modified_at)
         self.assertEqual(prompt_dict["tags"], ["serialization"])
+        self.assertEqual(prompt_dict["created_by_user_id"], "user_serializer_test")
+
+    def test_to_dict_serialization_with_none_user_id(self):
+        """Test to_dict() when created_by_user_id is None."""
+        prompt = PromptObject(
+            role="Test Role", context="Test Context", task="Test Task",
+            constraints=[], examples=[],
+            created_by_user_id=None
+        )
+        prompt_dict = prompt.to_dict()
+        self.assertIsNone(prompt_dict["created_by_user_id"])
+        self.assertIn("created_by_user_id", prompt_dict.keys())
 
     def test_from_dict_deserialization(self):
         """Test the from_dict() class method for correct deserialization."""
         original_prompt = PromptObject(
             role="Original Role", context="Original Context", task="Original Task",
-            constraints=["OC1"], examples=["OE1"], tags=["original"]
+            constraints=["OC1"], examples=["OE1"], tags=["original"],
+            created_by_user_id="user_deserial_test"
         )
         prompt_data = original_prompt.to_dict()
 
@@ -105,25 +124,46 @@ class TestPromptObject(unittest.TestCase):
         self.assertEqual(reconstructed_prompt.created_at, original_prompt.created_at)
         self.assertEqual(reconstructed_prompt.last_modified_at, original_prompt.last_modified_at)
         self.assertEqual(reconstructed_prompt.tags, original_prompt.tags)
+        self.assertEqual(reconstructed_prompt.created_by_user_id, "user_deserial_test")
+
+    def test_from_dict_deserialization_missing_or_none_user_id(self):
+        """Test from_dict() when created_by_user_id is missing or None in data."""
+        # Case 1: created_by_user_id is missing from data
+        minimal_data_missing_user_id = {
+            "role": "R", "context": "C", "task": "T",
+            "constraints": [], "examples": [],
+            "prompt_id": str(uuid.uuid4()), "version": 1,
+            "created_at": "2023-01-01T00:00:00Z", "last_modified_at": "2023-01-01T00:00:00Z",
+            "tags": []
+        }
+        prompt1 = PromptObject.from_dict(minimal_data_missing_user_id)
+        self.assertIsNone(prompt1.created_by_user_id)
+
+        # Case 2: created_by_user_id is explicitly None in data
+        minimal_data_none_user_id = minimal_data_missing_user_id.copy()
+        minimal_data_none_user_id["created_by_user_id"] = None
+        prompt2 = PromptObject.from_dict(minimal_data_none_user_id)
+        self.assertIsNone(prompt2.created_by_user_id)
 
     def test_serialization_idempotency(self):
         """Test that serializing then deserializing results in an equivalent object dict."""
-        prompt = PromptObject(
+        prompt_with_user = PromptObject(
             role="Idempotent Role", context="Idempotent Context", task="Idempotent Task",
-            constraints=["IC1"], examples=["IE1"], version=10, tags=["idempotency_check"]
+            constraints=["IC1"], examples=["IE1"], version=10, tags=["idempotency_check"],
+            created_by_user_id="user_idem_test"
         )
+        original_dict_with = prompt_with_user.to_dict()
+        reconstructed_prompt_with = PromptObject.from_dict(original_dict_with)
+        self.assertEqual(reconstructed_prompt_with.to_dict(), original_dict_with)
 
-        # Get the dictionary representation of the original prompt
-        original_dict = prompt.to_dict()
-
-        # Create a new prompt object from this dictionary
-        reconstructed_prompt = PromptObject.from_dict(original_dict)
-
-        # Get the dictionary representation of the reconstructed prompt
-        reconstructed_dict = reconstructed_prompt.to_dict()
-
-        # Compare the two dictionaries
-        self.assertEqual(original_dict, reconstructed_dict)
+        prompt_without_user = PromptObject(
+            role="Idempotent Role", context="Idempotent Context", task="Idempotent Task",
+            constraints=["IC1"], examples=["IE1"], version=10, tags=["idempotency_check"],
+            created_by_user_id=None # Explicitly None
+        )
+        original_dict_without = prompt_without_user.to_dict()
+        reconstructed_prompt_without = PromptObject.from_dict(original_dict_without)
+        self.assertEqual(reconstructed_prompt_without.to_dict(), original_dict_without)
 
 if __name__ == '__main__':
     unittest.main()

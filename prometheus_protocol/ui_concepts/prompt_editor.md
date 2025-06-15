@@ -269,13 +269,16 @@ This section describes how the execution of a single `PromptObject` is initiated
 ### B. "Jules Response Panel"
 *   A new panel or area within the editor, possibly appearing or expanding upon execution.
 *   **Content when `AIResponse.was_successful` is True:**
-    *   **AI-Generated Content:** Displays `AIResponse.content` in a read-only text area. Users can copy this content.
-    *   **Response Metadata (Optional Display):**
-        *   `jules_tokens_used`
-        *   `jules_finish_reason`
-        *   `jules_model_used`
-        *   `timestamp_response_received`
-    *   **Feedback Collection UI:** Below the content, the UI elements for collecting analytics feedback (as described in `prometheus_protocol/concepts/output_analytics.md` Section V.C - e.g., ratings, tags, qualitative notes, "Used in Final Work" flag) would appear.
+    *   **AI-Generated Content:**
+        *   Displays `AIResponse.content` in a read-only text area.
+        *   The text area should be scrollable and support standard text selection for copying.
+        *   A dedicated "[Copy Response]" button should be available for easily copying the entire content.
+        *   If the AI response content is formatted (e.g., Markdown, code blocks), the UI should attempt to render it appropriately for readability (e.g., display rendered Markdown, apply syntax highlighting to code). A toggle to view "Raw Text" vs. "Rendered View" could be beneficial for users needing to copy the exact source or inspect formatting.
+    *   **Response Metadata:**
+        *   Clearly display key metadata. This could be a small, well-labeled section within the response panel or a collapsible "Details" accordion.
+        *   Example: `Tokens Used: 152`, `Finish Reason: stop`, `Model: jules-conceptual-stub-v1-dynamic`, `Response Time: 1.2s` (if calculable from `timestamp_request_sent` and `timestamp_response_received` in `AIResponse`).
+    *   **Feedback Collection UI:**
+        *   This feedback form (for ratings, tags, notes, "Used in Final Work" flag, as per `output_analytics.md`) should appear clearly associated with the displayed AI response, prompting the user to provide their assessment for *this specific execution*.
 *   **Content when `AIResponse.was_successful` is False:**
         *   Displays `AIResponse.error_message` prominently. This message should be user-friendly and actionable, as defined in `prometheus_protocol/concepts/error_handling_recovery.md`.
         *   Examples:

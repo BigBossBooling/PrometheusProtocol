@@ -302,10 +302,16 @@ This section outlines how a multi-turn `Conversation` is executed and how respon
 2.  **Selected Turn Detail Panel (Area C from Layout) - Response Area:**
     *   When a `PromptTurn` has been executed (or is being viewed after execution):
         *   A dedicated read-only area within this panel (e.g., below the embedded PromptObject Editor for that turn) displays the `AIResponse` for that turn.
-        *   **If `AIResponse.was_successful` is True:**
-            *   Displays `AIResponse.content`.
-            *   Optionally shows response metadata (`tokens_used`, etc.).
-            *   The "Feedback Collection UI" for analytics (ratings, tags, etc.) for *this specific turn's output* appears here.
+        *   **If `AIResponse.was_successful` is True (for the selected executed turn):**
+            *   **AI-Generated Content for the Turn:**
+                *   Displays the `AIResponse.content` for this turn in a read-only text area within the "Selected Turn Detail Panel".
+                *   This text area should be scrollable and support standard text selection.
+                *   A dedicated "[Copy Turn Response]" button should be available for this specific turn's content.
+                *   If the AI response content is formatted (e.g., Markdown, code blocks), the UI should attempt to render it appropriately (e.g., display rendered Markdown, apply syntax highlighting). A "Raw Text" vs. "Rendered View" toggle could be beneficial here as well.
+            *   **Turn-Specific Response Metadata:**
+                *   Clearly display key metadata for this turn's response (e.g., `Tokens Used: 85`, `Finish Reason: stop`, `Model: jules-conceptual-stub-v1-conv-dynamic`). This could be a small, labeled section.
+            *   **Feedback Collection UI for the Turn:**
+                *   The "Feedback Collection UI" (for ratings, tags, notes on the output of this specific turn, as per `output_analytics.md`) should be clearly presented here, directly associated with this turn's `AIResponse`.
         *   **If `AIResponse.was_successful` is False:**
             *   Displays the user-friendly `AIResponse.error_message` clearly (e.g., "Network Error on this turn. Retries failed." or "Content policy violation for this turn's prompt.").
             *   Indicates if retries were attempted for this turn (e.g., "Retrying (attempt X of Y)..." if the user selects the turn while it's in a retry loop).
@@ -314,6 +320,43 @@ This section outlines how a multi-turn `Conversation` is executed and how respon
 3.  **Conversation Log/Transcript View (Optional V1.1/V2):**
     *   A separate panel or view that shows the entire conversation transcript as it unfolds (User prompt 1, AI response 1, User prompt 2, AI response 2, etc.).
     *   This would provide a continuous narrative view of the dialogue. For V1, focusing on per-turn response display in Area C is primary.
+
+3.  **Conversation Log/Transcript View:**
+    *   **Purpose:** Provides a continuous, chronological, and easily readable consolidated view of the entire dialogue as it has occurred or been executed. This view is essential for understanding the full context and flow of the conversation.
+    *   **Location:** This could be a prominent, scrollable panel within the Conversation Composer interface. For example:
+        *   A central panel that can be toggled or resized.
+        *   A tab within the main work area, switching from the "Turn Editor" view to a "Transcript View."
+    *   **Layout & Content:**
+        *   Each message (user input or AI response) in the log is clearly attributed to its speaker (e.g., "User (Turn X)" or "Jules (Turn X)"). Timestamps for each message could be an optional display setting.
+        *   **User Messages:** Display the core input sent to Jules for that turn. For V1, this would typically be `PromptTurn.prompt_object.task`. A short snippet of `PromptTurn.prompt_object.role` or `PromptTurn.notes` might also be included if they provide key context for that turn's framing. Example:
+            ```
+            -----------------------------------
+            User (Turn 1 - Role: Travel Agent)
+            Task: Suggest a 3-day itinerary for Paris.
+            -----------------------------------
+            ```
+        *   **AI Messages:** Display the `AIResponse.content` if the turn was successful. If an error occurred for that turn (`AIResponse.was_successful == False`), display the `AIResponse.error_message` clearly marked as an error. Example:
+            ```
+            Jules (Turn 1)
+            Okay, here's a possible 3-day itinerary for Paris: Day 1...
+            -----------------------------------
+            User (Turn 2 - Role: Travel Agent)
+            Task: error_test:content_policy
+            -----------------------------------
+            Jules (Turn 2) - ERROR
+            Simulated content policy violation for turn [turn_id].
+            -----------------------------------
+            ```
+        *   Messages are visually distinct (e.g., different background colors, text alignment, or icons for "User" vs. "Jules" vs. "Jules Error"), similar to common chat or messaging applications.
+        *   The log should be scrollable, with an option or default behavior to keep the latest message in view as new turns are executed or added.
+        *   Content within messages (especially AI responses) should support standard text selection and copying. A "[Copy Turn Content]" button could appear on hover for each message block.
+        *   Formatted content (Markdown, code) from AI responses should be rendered appropriately within the log.
+    *   **Interaction (Conceptual):**
+        *   **Navigation:** Clicking on a specific "User (Turn X)" or "Jules (Turn X)" entry in the log could:
+            *   Highlight the corresponding "Turn Card" in the "Turn Sequence Display/Editor Area" (Area B).
+            *   Select that turn, populating the "Selected Turn Detail Panel" (Area C) with its full details (including the `PromptObject` editor and the `AIResponse`). This allows for easy navigation between the summarized transcript and the detailed turn editor.
+        *   **Copy Full Transcript:** A "[Copy Full Transcript]" button should be available for this view, which copies the entire dialogue (perhaps in a simple text format or basic Markdown) to the clipboard.
+        *   **Filtering (V2 Consideration):** Future versions might allow filtering the transcript (e.g., show only AI responses, show only turns with errors).
 
 ### C. Post-Execution and Error Handling in Conversations
 
