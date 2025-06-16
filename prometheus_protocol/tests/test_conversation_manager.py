@@ -260,5 +260,79 @@ class TestConversationManager(unittest.TestCase):
         expected = {"valid_convo": [1]}
         self.assertEqual(self.manager.list_conversations(), expected)
 
+    # --- Tests for Delete Methods ---
+
+    def test_delete_conversation_version_success(self):
+        """Test deleting a specific version of a conversation successfully."""
+        convo_name = "delete_version_convo_test"
+        sanitized_name = self.manager._sanitize_base_name(convo_name)
+        # Save a few versions
+        c1 = self._create_conversation_for_test("v1", task_for_turn1="ConvoV1 Task")
+        self.manager.save_conversation(c1, convo_name) # Saves as v1
+        c2 = self._create_conversation_for_test("v2", task_for_turn1="ConvoV2 Task")
+        self.manager.save_conversation(c2, convo_name) # Saves as v2
+
+        file_v1 = self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 1)
+        self.assertTrue(file_v1.exists())
+
+        delete_result = self.manager.delete_conversation_version(convo_name, 1)
+        self.assertTrue(delete_result, "delete_conversation_version should return True on success.")
+        self.assertFalse(file_v1.exists(), "Version 1 file should be deleted.")
+
+        file_v2 = self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 2)
+        self.assertTrue(file_v2.exists(), "Version 2 file should still exist.")
+
+        listed_convos = self.manager.list_conversations()
+        self.assertIn(sanitized_name, listed_convos)
+        self.assertEqual(listed_convos[sanitized_name], [2])
+
+    def test_delete_conversation_version_non_existent_version(self):
+        """Test deleting a non-existent version of a conversation."""
+        convo_name = "delete_non_existent_convo_version"
+        sanitized_name = self.manager._sanitize_base_name(convo_name)
+        c1 = self._create_conversation_for_test("v1")
+        self.manager.save_conversation(c1, convo_name) # Only v1 exists
+
+        delete_result = self.manager.delete_conversation_version(convo_name, 5)
+        self.assertFalse(delete_result, "delete_conversation_version should return False for non-existent version.")
+
+        file_v1 = self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 1)
+        self.assertTrue(file_v1.exists())
+
+    def test_delete_conversation_version_non_existent_name(self):
+        """Test deleting a version from a non-existent conversation base name."""
+        delete_result = self.manager.delete_conversation_version("no_such_convo_ever", 1)
+        self.assertFalse(delete_result, "delete_conversation_version should return False for non-existent name.")
+
+    def test_delete_conversation_all_versions_success(self):
+        """Test deleting all versions of a conversation successfully."""
+        convo_name = "delete_all_convo_test"
+        sanitized_name = self.manager._sanitize_base_name(convo_name)
+        self.manager.save_conversation(self._create_conversation_for_test("v1"), convo_name) # v1
+        self.manager.save_conversation(self._create_conversation_for_test("v2"), convo_name) # v2
+        self.manager.save_conversation(self._create_conversation_for_test("v3"), convo_name) # v3
+
+        other_convo_name = "other_convo"
+        sanitized_other_name = self.manager._sanitize_base_name(other_convo_name)
+        self.manager.save_conversation(self._create_conversation_for_test("other"), other_convo_name)
+
+        deleted_count = self.manager.delete_conversation_all_versions(convo_name)
+        self.assertEqual(deleted_count, 3)
+
+        self.assertFalse((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 1)).exists())
+        self.assertFalse((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 2)).exists())
+        self.assertFalse((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 3)).exists())
+
+        listed_convos = self.manager.list_conversations()
+        self.assertNotIn(sanitized_name, listed_convos)
+        self.assertIn(sanitized_other_name, listed_convos)
+        self.assertTrue((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_other_name, 1)).exists())
+
+    def test_delete_conversation_all_versions_non_existent_name(self):
+        """Test deleting all versions for a non-existent conversation base name."""
+        deleted_count = self.manager.delete_conversation_all_versions("no_such_convo_for_all_delete")
+        self.assertEqual(deleted_count, 0)
+
+
 if __name__ == '__main__':
     unittest.main()

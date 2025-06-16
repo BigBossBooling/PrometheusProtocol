@@ -725,53 +725,120 @@ elif menu_choice == "Template Library":
     st.markdown("Explore, load, and manage your saved PromptObject templates.")
     try:
         templates = template_manager.list_templates() # Returns Dict[str, List[int]]
-        if not templates:
-            st.info("No Prompt Templates saved yet. Head to the 'Prompt Editor' to create one!")
-
         search_term_template = st.text_input("Search templates by name:", key="search_template_lib")
 
-        for i, (base_name, versions) in enumerate(sorted(templates.items())): # Ensure sorted display of templates
-            if search_term_template.lower() not in base_name.lower():
-                continue
+        if not templates:
+            st.info("No Prompt Templates saved yet. Head to the 'Prompt Editor' to create one!")
+        else:
+            for base_name, versions in sorted(templates.items()):
+                if search_term_template.lower() not in base_name.lower():
+                    continue
 
-            st.markdown(f"#### Template: **{base_name}**")
-            latest_version = versions[-1]
+                st.markdown(f"#### Template: **{base_name}**")
+                latest_version = versions[-1]
 
-            # Display versions in a more user-friendly way, e.g., as tags or a compact list
-            version_tags = [f"v{v}" for v in reversed(versions)] # Show latest first
-            st.write(f"Available Versions: {', '.join(version_tags)}")
+                # --- Display and Load Buttons ---
+                col_display1, col_display2 = st.columns([0.7, 0.3])
+                with col_display1:
+                    version_tags = [f"v{v}" for v in reversed(versions)]
+                    st.write(f"Available Versions: {', '.join(version_tags)}")
 
-            col_load_latest, col_load_specific, col_delete_tmpl = st.columns([0.4, 0.4, 0.2])
-            with col_load_latest:
-                if st.button(f"📂 Load Latest (v{latest_version})", key=f"tpl_load_latest_{base_name}_{i}"): # Added i for key uniqueness
-                    st.session_state.current_prompt_object = template_manager.load_template(base_name, latest_version)
-                    st.session_state.menu_choice = "Prompt Editor"
-                    st.session_state.current_conversation_object = None
-                    st.session_state.conversation_run_results = None
-                    st.session_state.last_ai_response_single = None
-                    st.experimental_rerun()
+                with col_display2: # Load Latest Button
+                    if st.button(f"📂 Load Latest (v{latest_version})", key=f"tpl_load_latest_{base_name}"):
+                        try:
+                            st.session_state.current_prompt_object = template_manager.load_template(base_name, latest_version)
+                            st.session_state.menu_choice = "Prompt Editor"
+                            st.session_state.current_conversation_object = None
+                            st.session_state.conversation_run_results = None
+                            st.session_state.last_ai_response_single = None
+                            st.experimental_rerun()
+                        except FileNotFoundError:
+                            st.error(f"Template '{base_name}' v{latest_version} not found. It might have been deleted.")
+                        except TemplateCorruptedError as e:
+                            st.error(f"Could not load template '{base_name}' v{latest_version}: {e}")
 
-            with col_load_specific:
+                # --- Load Specific Version ---
                 if len(versions) > 1:
-                    # Present versions with latest first for selectbox
-                    sorted_versions_for_select = sorted(versions, reverse=True)
-                    version_to_load = st.selectbox(
-                        "Load specific version:",
-                        options=sorted_versions_for_select,
-                        format_func=lambda x: f"v{x}",
-                        key=f"tpl_select_version_{base_name}_{i}" # Added i for key uniqueness
-                    )
-                    if st.button(f"📂 Load v{version_to_load}", key=f"tpl_load_specific_{base_name}_{version_to_load}_{i}"): # Added i
-                        st.session_state.current_prompt_object = template_manager.load_template(base_name, version_to_load)
-                        st.session_state.menu_choice = "Prompt Editor"
-                        st.session_state.current_conversation_object = None
-                        st.session_state.conversation_run_results = None
-                        st.session_state.last_ai_response_single = None
-                        st.experimental_rerun()
+                    cols_specific_load = st.columns([0.7, 0.3])
+                    with cols_specific_load[0]:
+                        sorted_versions_for_select = sorted(versions, reverse=True)
+                        version_to_load_specific = st.selectbox(
+                            "Load specific version:",
+                            options=sorted_versions_for_select,
+                            format_func=lambda x: f"v{x}",
+                            key=f"tpl_select_version_{base_name}"
+                        )
+                    with cols_specific_load[1]:
+                        if st.button(f"📂 Load v{version_to_load_specific}", key=f"tpl_load_specific_{base_name}_{version_to_load_specific}"):
+                            try:
+                                st.session_state.current_prompt_object = template_manager.load_template(base_name, version_to_load_specific)
+                                st.session_state.menu_choice = "Prompt Editor"
+                                st.session_state.current_conversation_object = None
+                                st.session_state.conversation_run_results = None
+                                st.session_state.last_ai_response_single = None
+                                st.experimental_rerun()
+                            except FileNotFoundError:
+                                 st.error(f"Template '{base_name}' v{version_to_load_specific} not found.")
+                            except TemplateCorruptedError as e:
+                                 st.error(f"Could not load template '{base_name}' v{version_to_load_specific}: {e}")
 
-            with col_delete_tmpl:
-                 st.button("🗑️ Del (V2)", key=f"tpl_delete_{base_name}_{i}", disabled=True, help="Delete functionality for future versions.") # Added i
-            st.markdown("---")
+                st.markdown("---")
+
+                # --- Delete Actions for this base_name ---
+                st.write("**Delete Options:**")
+                # Calculate number of columns needed: one for each version + one for "Delete All"
+                # Max columns for Streamlit is typically around 10-12 for readability. If more versions, might need different UI.
+                num_delete_cols = min(len(versions) + 1, 10)
+                cols_delete_actions = st.columns(num_delete_cols)
+
+                # "Delete All Versions" button
+                with cols_delete_actions[0]:
+                    delete_all_key = f"confirm_delete_all_tpl_{base_name}"
+                    if st.button(f"🗑️ All ({len(versions)})", key=f"btn_del_all_tpl_{base_name}", help=f"Delete all versions of '{base_name}'"):
+                        st.session_state[delete_all_key] = True
+
+                    if st.session_state.get(delete_all_key):
+                        st.warning(f"**Confirm:** Delete all {len(versions)} versions of '{base_name}'?")
+                        col_confirm_all1, col_confirm_all2 = st.columns(2)
+                        with col_confirm_all1:
+                            if st.button("YES, DELETE ALL", key=f"yes_del_all_tpl_{base_name}", type="primary"):
+                                deleted_count = template_manager.delete_template_all_versions(base_name)
+                                st.success(f"Deleted {deleted_count} version(s) of '{base_name}'.")
+                                del st.session_state[delete_all_key]
+                                st.experimental_rerun()
+                        with col_confirm_all2:
+                            if st.button("NO, CANCEL", key=f"no_del_all_tpl_{base_name}"):
+                                del st.session_state[delete_all_key]
+                                st.experimental_rerun()
+
+                # "Delete Specific Version" buttons
+                # Display buttons for up to (num_delete_cols - 1) individual versions
+                versions_to_display_delete = list(reversed(versions))[:num_delete_cols-1]
+
+                for idx, version_num in enumerate(versions_to_display_delete):
+                    with cols_delete_actions[idx + 1]:
+                        delete_specific_key = f"confirm_delete_tpl_{base_name}_v{version_num}"
+                        if st.button(f"🗑️ v{version_num}", key=f"btn_del_tpl_{base_name}_v{version_num}", help=f"Delete version {version_num} of '{base_name}'"):
+                            st.session_state[delete_specific_key] = True
+
+                        if st.session_state.get(delete_specific_key):
+                            st.warning(f"**Confirm:** Delete '{base_name}' v{version_num}?")
+                            col_confirm_spec1, col_confirm_spec2 = st.columns(2)
+                            with col_confirm_spec1:
+                                if st.button(f"YES, DELETE v{version_num}", key=f"yes_del_tpl_{base_name}_v{version_num}", type="primary"):
+                                    deleted = template_manager.delete_template_version(base_name, version_num)
+                                    if deleted:
+                                        st.success(f"Template '{base_name}' version {version_num} deleted.")
+                                    else:
+                                        st.error(f"Failed to delete '{base_name}' version {version_num} (it may have already been deleted).")
+                                    del st.session_state[delete_specific_key]
+                                    st.experimental_rerun()
+                            with col_confirm_spec2:
+                                if st.button(f"NO, CANCEL v{version_num}", key=f"no_del_tpl_{base_name}_v{version_num}"):
+                                    del st.session_state[delete_specific_key]
+                                    st.experimental_rerun()
+
+                st.markdown("---") # End of section for this base_name
 
     except Exception as e:
         st.error(f"Error loading template library: {e}")
@@ -781,51 +848,118 @@ elif menu_choice == "Conversation Library":
     st.header("Your Dialogue Vault: Conversation Library")
     st.markdown("Manage and load your saved multi-turn conversations.")
     try:
-        conversations = conversation_manager.list_conversations() # Returns Dict[str, List[int]]
-        if not conversations:
-            st.info("No Conversations saved yet. Head to the 'Conversation Composer' to engineer a new dialogue!")
-
+        conversations = conversation_manager.list_conversations()
         search_term_conv = st.text_input("Search conversations by name:", key="search_conv_lib")
 
-        for i, (base_name, versions) in enumerate(sorted(conversations.items())): # Ensure sorted display
-            if search_term_conv.lower() not in base_name.lower():
-                continue
+        if not conversations:
+            st.info("No Conversations saved yet. Head to the 'Conversation Composer' to engineer a new dialogue!")
+        else:
+            for base_name, versions in sorted(conversations.items()):
+                if search_term_conv.lower() not in base_name.lower():
+                    continue
 
-            st.markdown(f"#### Conversation: **{base_name}**")
-            latest_version = versions[-1]
-            version_tags = [f"v{v}" for v in reversed(versions)]
-            st.write(f"Available Versions: {', '.join(version_tags)}")
+                st.markdown(f"#### Conversation: **{base_name}**")
+                latest_version = versions[-1]
 
-            col_load_latest_c, col_load_specific_c, col_delete_c = st.columns([0.4, 0.4, 0.2])
-            with col_load_latest_c:
-                if st.button(f"📂 Load Latest (v{latest_version})", key=f"cnv_load_latest_{base_name}_{i}"): # Added i
-                    st.session_state.current_conversation_object = conversation_manager.load_conversation(base_name, latest_version)
-                    st.session_state.menu_choice = "Conversation Composer"
-                    st.session_state.current_prompt_object = None
-                    st.session_state.conversation_run_results = None
-                    st.session_state.last_ai_response_single = None
-                    st.experimental_rerun()
+                # --- Display and Load Buttons ---
+                col_display1_c, col_display2_c = st.columns([0.7, 0.3])
+                with col_display1_c:
+                    version_tags_c = [f"v{v}" for v in reversed(versions)]
+                    st.write(f"Available Versions: {', '.join(version_tags_c)}")
 
-            with col_load_specific_c:
+                with col_display2_c: # Load Latest Button
+                    if st.button(f"📂 Load Latest (v{latest_version})", key=f"cnv_load_latest_{base_name}"):
+                        try:
+                            st.session_state.current_conversation_object = conversation_manager.load_conversation(base_name, latest_version)
+                            st.session_state.menu_choice = "Conversation Composer"
+                            st.session_state.current_prompt_object = None
+                            st.session_state.conversation_run_results = None
+                            st.session_state.last_ai_response_single = None
+                            st.experimental_rerun()
+                        except FileNotFoundError:
+                            st.error(f"Conversation '{base_name}' v{latest_version} not found. It might have been deleted.")
+                        except ConversationCorruptedError as e:
+                            st.error(f"Could not load conversation '{base_name}' v{latest_version}: {e}")
+
+                # --- Load Specific Version ---
                 if len(versions) > 1:
-                    sorted_versions_for_select_c = sorted(versions, reverse=True)
-                    version_to_load_c = st.selectbox(
-                        "Load specific version:",
-                        options=sorted_versions_for_select_c,
-                        format_func=lambda x: f"v{x}",
-                        key=f"cnv_select_version_{base_name}_{i}" # Added i
-                    )
-                    if st.button(f"📂 Load v{version_to_load_c}", key=f"cnv_load_specific_{base_name}_{version_to_load_c}_{i}"): # Added i
-                        st.session_state.current_conversation_object = conversation_manager.load_conversation(base_name, version_to_load_c)
-                        st.session_state.menu_choice = "Conversation Composer"
-                        st.session_state.current_prompt_object = None
-                        st.session_state.conversation_run_results = None
-                        st.session_state.last_ai_response_single = None
-                        st.experimental_rerun()
-            with col_delete_c:
-                st.button("🗑️ Del (V2)", key=f"cnv_delete_{base_name}_{i}", disabled=True, help="Delete functionality for future versions.") # Added i
-            st.markdown("---")
+                    cols_specific_load_c = st.columns([0.7, 0.3])
+                    with cols_specific_load_c[0]:
+                        sorted_versions_for_select_c = sorted(versions, reverse=True)
+                        version_to_load_c = st.selectbox(
+                            "Load specific version:",
+                            options=sorted_versions_for_select_c,
+                            format_func=lambda x: f"v{x}",
+                            key=f"cnv_select_version_{base_name}"
+                        )
+                    with cols_specific_load_c[1]:
+                        if st.button(f"📂 Load v{version_to_load_c}", key=f"cnv_load_specific_{base_name}_{version_to_load_c}"):
+                            try:
+                                st.session_state.current_conversation_object = conversation_manager.load_conversation(base_name, version_to_load_c)
+                                st.session_state.menu_choice = "Conversation Composer"
+                                st.session_state.current_prompt_object = None
+                                st.session_state.conversation_run_results = None
+                                st.session_state.last_ai_response_single = None
+                                st.experimental_rerun()
+                            except FileNotFoundError:
+                                 st.error(f"Conversation '{base_name}' v{version_to_load_c} not found.")
+                            except ConversationCorruptedError as e:
+                                 st.error(f"Could not load conversation '{base_name}' v{version_to_load_c}: {e}")
 
+                st.markdown("---")
+
+                # --- Delete Actions for this base_name ---
+                st.write("**Delete Options:**")
+                max_specific_delete_buttons_c = 3
+                versions_for_quick_delete_c = list(reversed(versions))[:max_specific_delete_buttons_c]
+
+                num_delete_cols_c = 1 + min(len(versions), max_specific_delete_buttons_c)
+                cols_delete_actions_c = st.columns(num_delete_cols_c)
+
+                with cols_delete_actions_c[0]:
+                    delete_all_key_c = f"confirm_delete_all_cnv_{base_name}"
+                    if st.button(f"🗑️ All ({len(versions)})", key=f"btn_del_all_cnv_{base_name}", help=f"Delete all versions of conversation '{base_name}'"):
+                        st.session_state[delete_all_key_c] = True
+
+                    if st.session_state.get(delete_all_key_c):
+                        st.warning(f"**Confirm:** Delete all {len(versions)} versions of conversation '{base_name}'?")
+                        col_confirm_all_c, col_cancel_all_c = st.columns(2)
+                        with col_confirm_all_c:
+                            if st.button("YES, DELETE ALL", key=f"yes_del_all_cnv_{base_name}", type="primary"):
+                                deleted_count = conversation_manager.delete_conversation_all_versions(base_name)
+                                st.success(f"Deleted {deleted_count} version(s) of conversation '{base_name}'.")
+                                del st.session_state[delete_all_key_c]
+                                st.experimental_rerun()
+                        with col_cancel_all_c:
+                            if st.button("NO, CANCEL", key=f"no_del_all_cnv_{base_name}"):
+                                del st.session_state[delete_all_key_c]
+                                st.experimental_rerun()
+
+                for idx, version_num in enumerate(versions_for_quick_delete_c):
+                    if idx + 1 < num_delete_cols_c:
+                        with cols_delete_actions_c[idx + 1]:
+                            delete_specific_key_c = f"confirm_delete_cnv_{base_name}_v{version_num}"
+                            if st.button(f"🗑️ Del v{version_num}", key=f"btn_del_cnv_{base_name}_v{version_num}", help=f"Delete version {version_num} of conversation '{base_name}'"):
+                                st.session_state[delete_specific_key_c] = True
+
+                            if st.session_state.get(delete_specific_key_c):
+                                st.warning(f"**Confirm:** Delete conversation '{base_name}' version {version_num}?")
+                                col_confirm_spec_c, col_cancel_spec_c = st.columns(2)
+                                with col_confirm_spec_c:
+                                    if st.button(f"YES, DELETE v{version_num}", key=f"yes_del_cnv_{base_name}_v{version_num}", type="primary"):
+                                        deleted = conversation_manager.delete_conversation_version(base_name, version_num)
+                                        if deleted:
+                                            st.success(f"Conversation '{base_name}' version {version_num} deleted.")
+                                        else:
+                                            st.error(f"Failed to delete conversation '{base_name}' version {version_num} (it may have already been deleted).")
+                                        del st.session_state[delete_specific_key_c]
+                                        st.experimental_rerun()
+                                with col_cancel_spec_c:
+                                    if st.button(f"NO, CANCEL v{version_num}", key=f"no_del_cnv_{base_name}_v{version_num}"):
+                                        del st.session_state[delete_specific_key_c]
+                                        st.experimental_rerun()
+
+                st.markdown("---")
     except Exception as e:
         st.error(f"Error loading conversation library: {e}")
 

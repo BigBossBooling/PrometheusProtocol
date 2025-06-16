@@ -243,5 +243,102 @@ class TestTemplateManager(unittest.TestCase):
         expected = {"valid_template": [1]}
         self.assertEqual(self.manager.list_templates(), expected)
 
+    # --- Helper for delete tests ---
+    def _create_prompt_for_test(self, task_text: str, initial_version=1) -> PromptObject:
+        # Using a copy of dummy_prompt_content to avoid modifying class-level dict
+        content = self.dummy_prompt_content.copy()
+        content["task"] = task_text
+        # version in PromptObject is for its own state, save_template determines file version
+        return PromptObject(**content, version=initial_version)
+
+    # --- Tests for Delete Methods ---
+
+    def test_delete_template_version_success(self):
+        """Test deleting a specific version of a template successfully."""
+        template_name = "delete_version_test"
+        sanitized_name = self.manager._sanitize_base_name(template_name)
+        # Save a few versions
+        p1 = self._create_prompt_for_test("v1 content")
+        self.manager.save_template(p1, template_name) # Saves as v1
+        p2 = self._create_prompt_for_test("v2 content")
+        self.manager.save_template(p2, template_name) # Saves as v2
+
+        # Ensure v1 file exists
+        file_v1 = self.manager.templates_dir_path / self.manager._construct_filename(sanitized_name, 1)
+        self.assertTrue(file_v1.exists())
+
+        # Delete version 1
+        delete_result = self.manager.delete_template_version(template_name, 1)
+        self.assertTrue(delete_result, "delete_template_version should return True on success.")
+        self.assertFalse(file_v1.exists(), "Version 1 file should be deleted.")
+
+        # Check that version 2 still exists
+        file_v2 = self.manager.templates_dir_path / self.manager._construct_filename(sanitized_name, 2)
+        self.assertTrue(file_v2.exists(), "Version 2 file should still exist.")
+
+        # Check list_templates reflects the change
+        listed_templates = self.manager.list_templates()
+        self.assertIn(sanitized_name, listed_templates)
+        self.assertEqual(listed_templates[sanitized_name], [2]) # Only v2 should remain
+
+    def test_delete_template_version_non_existent_version(self):
+        """Test deleting a non-existent version of a template."""
+        template_name = "delete_non_existent_version"
+        sanitized_name = self.manager._sanitize_base_name(template_name)
+        p1 = self._create_prompt_for_test("v1 content")
+        self.manager.save_template(p1, template_name) # Only v1 exists
+
+        delete_result = self.manager.delete_template_version(template_name, 5) # Try to delete v5
+        self.assertFalse(delete_result, "delete_template_version should return False for non-existent version.")
+
+        # Ensure v1 still exists
+        file_v1 = self.manager.templates_dir_path / self.manager._construct_filename(sanitized_name, 1)
+        self.assertTrue(file_v1.exists())
+
+    def test_delete_template_version_non_existent_template_name(self):
+        """Test deleting a version from a non-existent template base name."""
+        delete_result = self.manager.delete_template_version("no_such_template_ever", 1)
+        self.assertFalse(delete_result, "delete_template_version should return False for non-existent template name.")
+
+    def test_delete_template_all_versions_success(self):
+        """Test deleting all versions of a template successfully."""
+        template_name = "delete_all_test"
+        sanitized_name = self.manager._sanitize_base_name(template_name)
+        # Save multiple versions
+        p1 = self._create_prompt_for_test("v1")
+        self.manager.save_template(p1, template_name) # v1
+        p2 = self._create_prompt_for_test("v2")
+        self.manager.save_template(p2, template_name) # v2
+        p3 = self._create_prompt_for_test("v3")
+        self.manager.save_template(p3, template_name) # v3
+
+        # Save another template to ensure it's not affected
+        other_template_name = "other_template"
+        sanitized_other_name = self.manager._sanitize_base_name(other_template_name)
+        p_other = self._create_prompt_for_test("other content")
+        self.manager.save_template(p_other, other_template_name) # v1 of other_template
+
+        deleted_count = self.manager.delete_template_all_versions(template_name)
+        self.assertEqual(deleted_count, 3, "Should report 3 versions deleted.")
+
+        # Verify all files for 'delete_all_test' are gone
+        self.assertFalse((self.manager.templates_dir_path / self.manager._construct_filename(sanitized_name, 1)).exists())
+        self.assertFalse((self.manager.templates_dir_path / self.manager._construct_filename(sanitized_name, 2)).exists())
+        self.assertFalse((self.manager.templates_dir_path / self.manager._construct_filename(sanitized_name, 3)).exists())
+
+        # Verify list_templates reflects the removal
+        listed_templates = self.manager.list_templates()
+        self.assertNotIn(sanitized_name, listed_templates)
+
+        # Verify other template still exists
+        self.assertIn(sanitized_other_name, listed_templates)
+        self.assertTrue((self.manager.templates_dir_path / self.manager._construct_filename(sanitized_other_name, 1)).exists())
+
+    def test_delete_template_all_versions_non_existent_template_name(self):
+        """Test deleting all versions for a non-existent template base name."""
+        deleted_count = self.manager.delete_template_all_versions("no_such_template_for_all_delete")
+        self.assertEqual(deleted_count, 0, "Should report 0 versions deleted for non-existent template.")
+
+
 if __name__ == '__main__':
     unittest.main()

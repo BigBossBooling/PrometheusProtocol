@@ -218,3 +218,66 @@ class ConversationManager:
             conversations_with_versions[base_name].sort()
 
         return conversations_with_versions
+
+    def delete_conversation_version(self, conversation_name: str, version: int) -> bool:
+        """
+        Deletes a specific version of a conversation.
+
+        Args:
+            conversation_name (str): The base name of the conversation.
+            version (int): The specific version to delete.
+
+        Returns:
+            bool: True if the version was successfully deleted, False otherwise
+                  (e.g., if the file didn't exist or an IOError occurred).
+        """
+        base_name = self._sanitize_base_name(conversation_name) # Can raise ValueError
+
+        file_name_str = self._construct_filename(base_name, version)
+        file_path = self.conversations_dir_path / file_name_str
+
+        if file_path.exists() and file_path.is_file():
+            try:
+                file_path.unlink()
+                # print(f"Deleted conversation version: {file_path}") # For debugging
+                return True
+            except IOError as e:
+                # Log this error in a real application
+                print(f"IOError deleting conversation version {file_path}: {e}")
+                return False
+        else:
+            # print(f"Conversation version not found for deletion: {file_path}") # For debugging
+            return False
+
+    def delete_conversation_all_versions(self, conversation_name: str) -> int:
+        """
+        Deletes all versions of a given conversation.
+
+        Args:
+            conversation_name (str): The base name of the conversation to delete all versions of.
+
+        Returns:
+            int: The number of versions successfully deleted.
+        """
+        base_name = self._sanitize_base_name(conversation_name) # Can raise ValueError
+
+        versions_to_delete = self._get_versions_for_base_name(base_name)
+        if not versions_to_delete:
+            # print(f"No versions found for conversation '{base_name}' to delete.") # For debugging
+            return 0
+
+        deleted_count = 0
+        for v_num in versions_to_delete:
+            file_name_str = self._construct_filename(base_name, v_num)
+            file_path = self.conversations_dir_path / file_name_str
+            if file_path.exists() and file_path.is_file(): # Double check
+                try:
+                    file_path.unlink()
+                    # print(f"Deleted conversation version: {file_path}") # For debugging
+                    deleted_count += 1
+                except IOError as e:
+                    # Log this error in a real application
+                    print(f"IOError deleting conversation version {file_path} during delete_all: {e}")
+                    # Continue to try deleting other versions
+
+        return deleted_count

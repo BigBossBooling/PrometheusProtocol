@@ -161,7 +161,9 @@ This section describes the main classes, functions, and conceptual components th
         *   `save_template(prompt: PromptObject, template_name: str) -> PromptObject`: Saves a prompt, assigning/incrementing its version.
         *   `load_template(template_name: str, version: Optional[int] = None) -> PromptObject`: Loads the latest or a specific version of a prompt template.
         *   `list_templates() -> Dict[str, List[int]]`: Lists all template base names and their available versions.
-    *   **Core Functionality:** Handles filename sanitization, version number management, JSON serialization/deserialization of `PromptObject`s.
+        *   `delete_template_version(template_name: str, version: int) -> bool`: Deletes a specific version of a template. Returns `True` on success.
+        *   `delete_template_all_versions(template_name: str) -> int`: Deletes all versions of a template. Returns count of deleted versions.
+    *   **Core Functionality:** Handles filename sanitization, version number management, JSON serialization/deserialization, and deletion of `PromptObject` template files.
     *   **Operates On:** `PromptObject`, file system (within its configured `templates_dir_path`).
     *   **Produces/Consumes:** `PromptObject` instances, JSON files.
 
@@ -171,7 +173,9 @@ This section describes the main classes, functions, and conceptual components th
         *   `save_conversation(conversation: Conversation, conversation_name: str) -> Conversation`: Saves a conversation, assigning/incrementing its version number and updating `last_modified_at`. Returns the updated `Conversation`.
         *   `load_conversation(conversation_name: str, version: Optional[int] = None) -> Conversation`: Loads the latest or a specific version of a conversation.
         *   `list_conversations() -> Dict[str, List[int]]`: Lists all conversation base names and their available sorted versions.
-    *   **Core Functionality:** Handles filename sanitization, version number management for conversations (e.g., `basename_v1.json`, `basename_v2.json`), JSON serialization/deserialization of `Conversation` objects (which include `PromptTurn` and nested `PromptObject`s).
+        *   `delete_conversation_version(conversation_name: str, version: int) -> bool`: Deletes a specific version of a conversation. Returns `True` on success.
+        *   `delete_conversation_all_versions(conversation_name: str) -> int`: Deletes all versions of a conversation. Returns count of deleted versions.
+    *   **Core Functionality:** Handles filename sanitization, version number management, JSON serialization/deserialization, and deletion of `Conversation` files.
     *   **Operates On:** `Conversation`, file system (within its configured `conversations_dir_path`).
     *   **Produces/Consumes:** `Conversation` instances, JSON files.
 
