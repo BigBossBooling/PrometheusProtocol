@@ -1,8 +1,9 @@
-from typing import List, Dict, Any # Any might be useful if PromptTurn.conditions become complex
+from typing import List, Dict, Any, Optional # Any might be useful if PromptTurn.conditions become complex
 
 from prometheus_protocol.core.jules_executor import JulesExecutor
 from prometheus_protocol.core.conversation import Conversation, PromptTurn # Conversation might be used by a higher-level orchestrator
 from prometheus_protocol.core.ai_response import AIResponse
+from prometheus_protocol.core.user_settings import UserSettings
 
 class ConversationOrchestrator:
     """
@@ -13,17 +14,21 @@ class ConversationOrchestrator:
     For V1, it assumes a linear execution of turns and halts on the first error.
     """
 
-    def __init__(self, jules_executor: JulesExecutor):
+    def __init__(self, jules_executor: JulesExecutor, user_settings: Optional[UserSettings] = None):
         """
         Initializes the ConversationOrchestrator.
 
         Args:
             jules_executor (JulesExecutor): An instance of JulesExecutor to be used
                                             for making (conceptual) calls to the AI engine.
+            user_settings (Optional[UserSettings], optional): User-specific settings
+                                                              to be passed to JulesExecutor.
+                                                              Defaults to None.
         """
         if not isinstance(jules_executor, JulesExecutor):
             raise TypeError("jules_executor must be an instance of JulesExecutor")
         self.jules_executor = jules_executor
+        self.user_settings = user_settings # Can be None
 
     def run_full_conversation(self, conversation: Conversation) -> Dict[str, AIResponse]:
         """
@@ -56,7 +61,8 @@ class ConversationOrchestrator:
 
             ai_response = self.jules_executor.execute_conversation_turn(
                 turn,
-                current_conversation_history
+                current_conversation_history,
+                user_settings=self.user_settings
             )
 
             # Populate source_conversation_id in the AIResponse

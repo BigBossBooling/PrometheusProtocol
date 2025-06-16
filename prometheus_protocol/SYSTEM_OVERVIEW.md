@@ -178,18 +178,19 @@ This section describes the main classes, functions, and conceptual components th
 *   **`JulesExecutor` (Conceptual Stub)** ([`core/jules_executor.py`](./core/jules_executor.py))
     *   **Responsibility:** (Conceptually) Manages all direct interaction with the hypothetical "Google Jules" AI engine. This includes formatting requests, "making API calls," and parsing responses.
     *   **Key Methods (Conceptual Stubs):**
-        *   `_prepare_jules_request_payload(prompt: PromptObject, history: Optional[List[Dict[str, str]]]) -> Dict[str, Any]`: Formats data for the Jules API, merging default execution settings with any settings provided in `PromptObject.settings`.
-        *   `execute_prompt(prompt: PromptObject) -> AIResponse`: "Executes" a single prompt.
-        *   `execute_conversation_turn(turn: PromptTurn, current_conversation_history: List[Dict[str, str]]) -> AIResponse`: "Executes" a single turn of a conversation.
-    *   **Core Functionality (Simulated):** Prepares request dictionaries based on `PromptObject` and history. Returns dynamic, simulated `AIResponse` objects that can mimic successful outputs or various error conditions based on input characteristics.
-    *   **Operates On:** `PromptObject`, `PromptTurn`, `List[Dict[str,str]]` (for history).
+        *   `_prepare_jules_request_payload(prompt: PromptObject, user_settings: Optional[UserSettings] = None, history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]`: Formats data for the Jules API.
+        *   `execute_prompt(prompt: PromptObject, user_settings: Optional[UserSettings] = None) -> AIResponse`: "Executes" a single prompt.
+        *   `execute_conversation_turn(turn: PromptTurn, current_conversation_history: List[Dict[str, str]], user_settings: Optional[UserSettings] = None) -> AIResponse`: "Executes" a single turn of a conversation.
+    *   **Core Functionality (Simulated):** Prepares request dictionaries. It establishes a settings hierarchy for execution parameters: `PromptObject.settings` override `UserSettings.default_execution_settings`, which in turn override hardcoded executor defaults. It also uses `UserSettings.default_jules_api_key` (if executor's initial key is a placeholder) and `UserSettings.preferred_output_language`. Returns dynamic, simulated `AIResponse` objects.
+    *   **Operates On:** `PromptObject`, `UserSettings`, `PromptTurn`, `List[Dict[str,str]]` (for history).
     *   **Produces:** `AIResponse` (simulated).
 
 *   **`ConversationOrchestrator`** ([`core/conversation_orchestrator.py`](./core/conversation_orchestrator.py))
     *   **Responsibility:** Manages the sequential execution of a `Conversation` object, orchestrating turn-by-turn interaction with the `JulesExecutor`.
+    *   **Constructor:** `__init__(self, jules_executor: JulesExecutor, user_settings: Optional[UserSettings] = None)` stores both dependencies.
     *   **Key Method:** `run_full_conversation(conversation: Conversation) -> Dict[str, AIResponse]`
-    *   **Core Functionality:** Iterates through `PromptTurn`s in a `Conversation`, calls `JulesExecutor.execute_conversation_turn` for each, manages the `conversation_history` list passed between turns, populates `AIResponse.source_conversation_id`, and collects all `AIResponse` objects. For V1, halts execution on the first turn that results in an error.
-    *   **Operates On:** `Conversation`, `JulesExecutor`.
+    *   **Core Functionality:** Iterates through `PromptTurn`s in a `Conversation`. Passes the stored `UserSettings` object to `JulesExecutor` when executing each turn. Manages the `conversation_history` list passed between turns, populates `AIResponse.source_conversation_id`, and collects all `AIResponse` objects. For V1, halts execution on the first turn that results in an error.
+    *   **Operates On:** `Conversation`, `JulesExecutor`, `UserSettings`.
     *   **Produces:** `Dict[str, AIResponse]` (mapping turn IDs to their responses).
 
 *   **`UserSettingsManager`** ([`core/user_settings_manager.py`](./core/user_settings_manager.py))
@@ -265,9 +266,13 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Next Steps (Future Work):** UI concepts for an "Execution Settings Panel" in the `PromptObject` editor have been added to `prompt_editor.md`. Further UI implementation would be needed.
 
 5.  **User Settings/Preferences Data Model & Basic Persistence:**
-    *   **Status: DONE (as of a recent iteration)**
-    *   **Summary:** Defined `UserSettings` dataclass ([`core/user_settings.py`](./core/user_settings.py)) and implemented `UserSettingsManager` ([`core/user_settings_manager.py`](./core/user_settings_manager.py)) for file-based persistence of user preferences.
-    *   **Next Steps (Future Work):** Full integration of `UserSettings` into relevant components (`JulesExecutor`, UI for theme/language, Catalysts for defaults). UI for users to view and modify their settings. Secure storage mechanisms for sensitive settings.
+    *   **Status: DONE (as of current iteration)**
+    *   **Summary:** Defined `UserSettings` dataclass in [`core/user_settings.py`](./core/user_settings.py) for user-specific configurations. Implemented `UserSettingsManager` in [`core/user_settings_manager.py`](./core/user_settings_manager.py) for file-based persistence. `JulesExecutor` and `ConversationOrchestrator` were updated to accept and utilize `UserSettings` to establish a settings hierarchy (Prompt > User > Executor defaults) for API key, execution parameters, and user preferences like language. A basic "User Settings" page was added to `streamlit_app.py` for viewing, editing, and saving these settings.
+    *   **Next Steps (Future Work):**
+            *   More granular UI for editing complex settings (e.g., `default_execution_settings`, `creative_catalyst_defaults`) beyond raw JSON.
+            *   Full UI integration for all `UserSettings` fields (e.g., UI theme application, Creative Catalyst modules actually using their defaults from `UserSettings`).
+            *   Secure storage and handling mechanisms for sensitive settings like API keys, especially in a production or multi-user cloud environment (currently stored in local JSON).
+            *   Integration with a full User Account Management system (registration, login, profiles) if Prometheus Protocol evolves into a multi-user application beyond the current single "default_streamlit_user".
 
 6.  **`GIGO Guardrail (`validate_prompt`)` - Return All Errors for Granular UI Feedback:**
     *   **Status:** **DONE (as of current iteration)**

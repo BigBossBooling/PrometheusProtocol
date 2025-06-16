@@ -5,6 +5,7 @@ import uuid # For dummy request IDs if needed by AIResponse
 from prometheus_protocol.core.prompt import PromptObject
 from prometheus_protocol.core.conversation import Conversation, PromptTurn # Conversation might be used by a higher-level orchestrator
 from prometheus_protocol.core.ai_response import AIResponse
+from prometheus_protocol.core.user_settings import UserSettings
 
 class JulesExecutor:
     """
@@ -33,53 +34,59 @@ class JulesExecutor:
         # In a real implementation, an HTTP client (e.g., requests.Session) would be initialized here.
 
     def _prepare_jules_request_payload(self, prompt: PromptObject,
+                                 user_settings: Optional[UserSettings] = None,
                                  history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
         (Private conceptual helper) Prepares the JSON payload for the Jules API request
-        based on a PromptObject and optional conversation history.
-        Prompt-specific settings override executor defaults.
+        based on a PromptObject, optional UserSettings, and optional conversation history.
+        Settings hierarchy: PromptObject > UserSettings > Executor Defaults.
 
         Args:
             prompt (PromptObject): The prompt object to derive payload from.
-                                   Its 'settings' attribute can override default execution parameters.
+            user_settings (Optional[UserSettings]): User-specific settings.
             history (Optional[List[Dict[str, str]]]): Simplified conversation history.
-                                                     Each dict: {"speaker": "user/ai", "text": ...}
 
         Returns:
             Dict[str, Any]: The dictionary to be serialized as JSON for the Jules API request.
         """
 
-        # Default execution settings within the executor
-        default_executor_settings = {
-            "temperature": 0.7,
-            "max_tokens": 500,
-            "creativity_level_preference": "balanced" # From hypothetical API contract
+        # 1. Start with hardcoded system/executor defaults
+        final_execution_settings = {
+            "temperature": 0.7, # System default
+            "max_tokens": 500,  # System default
+            "creativity_level_preference": "balanced" # System default
         }
 
-        # Start with defaults, then override with prompt-specific settings if they exist
-        final_execution_settings = default_executor_settings.copy()
+        # 2. Layer UserSettings defaults if provided
+        if user_settings and user_settings.default_execution_settings:
+            for key, value in user_settings.default_execution_settings.items():
+                if value is not None: # Only apply if user setting is not None
+                    final_execution_settings[key] = value
+
+        # 3. Layer PromptObject settings if provided (highest precedence)
         if prompt.settings: # prompt.settings is Optional[Dict[str, Any]]
             for key, value in prompt.settings.items():
                 if value is not None: # Only override if the prompt setting value is not None
                     final_execution_settings[key] = value
-                # If a key from prompt.settings has a value of None,
-                # it implies "use the executor's default or don't send this setting".
-                # For simplicity here, we'll just not update if value is None,
-                # effectively keeping the default. A more complex strategy could remove the key.
-                # Or, if Jules API handles `null` for "use default", then `final_execution_settings[key] = value` is fine always.
-                # Let's assume for now we only pass non-None values from prompt.settings.
 
         prompt_payload_dict = {
             "role": prompt.role,
             "task_description": prompt.task,
             "context_data": prompt.context,
-            "constraints_list": prompt.constraints, # Assumes this is List[str]
-            "examples_list": prompt.examples,       # Assumes this is List[str]
-            "settings": final_execution_settings # Use the merged settings
+            "constraints_list": prompt.constraints,
+            "examples_list": prompt.examples,
+            "settings": final_execution_settings
         }
 
+        # API Key Logic
+        if user_settings and user_settings.default_jules_api_key and \
+           (self.api_key == "YOUR_HYPOTHETICAL_API_KEY" or self.api_key is None):
+            effective_api_key = user_settings.default_jules_api_key
+        else:
+            effective_api_key = self.api_key
+
         jules_request = {
-            "api_key": self.api_key, # This is hypothetical; real client might set it in headers
+            "api_key": effective_api_key,
             "request_id_client": str(uuid.uuid4()),
             "prompt_payload": prompt_payload_dict
         }
@@ -87,21 +94,28 @@ class JulesExecutor:
         if history:
             jules_request["conversation_history"] = history
 
+        # Add user_preferences if available
+        if user_settings and user_settings.preferred_output_language:
+            jules_request["user_preferences"] = {
+                "output_language_preference": user_settings.preferred_output_language
+            }
+
         return jules_request
 
-    def execute_prompt(self, prompt: PromptObject) -> AIResponse:
+    def execute_prompt(self, prompt: PromptObject, user_settings: Optional[UserSettings] = None) -> AIResponse:
         """
         (Conceptual) Executes a single PromptObject with Jules.
         Simulates different API responses based on prompt.task content for testing.
 
         Args:
             prompt (PromptObject): The prompt to execute.
+            user_settings (Optional[UserSettings]): User-specific settings to apply.
 
         Returns:
             AIResponse: A structured response object, simulating various scenarios.
         """
         # Prepare the conceptual request payload (useful for getting client_request_id)
-        request_payload_dict = self._prepare_jules_request_payload(prompt)
+        request_payload_dict = self._prepare_jules_request_payload(prompt, user_settings=user_settings)
         client_request_id = request_payload_dict.get("request_id_client")
 
         print(f"CONCEPTUAL: Executing prompt (ID: {prompt.prompt_id}, Task: '{prompt.task[:50]}...') with Jules.")
@@ -210,8 +224,8 @@ class JulesExecutor:
         Args:
             turn (PromptTurn): The specific prompt turn to execute.
             current_conversation_history (List[Dict[str, str]]):
-                The history of the conversation so far, typically a list of
-                {"speaker": "user/ai", "text": ...} dictionaries.
+                The history of the conversation so far.
+            user_settings (Optional[UserSettings]): User-specific settings to apply.
 
         Returns:
             AIResponse: A structured response object for this turn, simulating various scenarios.
@@ -220,6 +234,7 @@ class JulesExecutor:
         # Prepare the conceptual request payload
         request_payload_dict = self._prepare_jules_request_payload(
             prompt_to_execute,
+            user_settings=user_settings,
             history=current_conversation_history
         )
         client_request_id = request_payload_dict.get("request_id_client")

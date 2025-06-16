@@ -4,6 +4,7 @@ from prometheus_protocol.core.prompt import PromptObject
 from prometheus_protocol.core.conversation import PromptTurn
 from prometheus_protocol.core.ai_response import AIResponse
 from prometheus_protocol.core.jules_executor import JulesExecutor
+from prometheus_protocol.core.user_settings import UserSettings # Added import
 
 class TestJulesExecutor(unittest.TestCase):
 
@@ -35,6 +36,7 @@ class TestJulesExecutor(unittest.TestCase):
 
         self.assertEqual(payload["api_key"], "test_api_key")
         self.assertTrue(isinstance(uuid.UUID(payload["request_id_client"]), uuid.UUID)) # Valid UUID
+        self.assertNotIn("user_preferences", payload) # Ensure not present by default
 
         prompt_payload = payload["prompt_payload"]
         self.assertEqual(prompt_payload["role"], prompt.role)
@@ -54,64 +56,82 @@ class TestJulesExecutor(unittest.TestCase):
         self.assertIn("conversation_history", payload)
         self.assertEqual(payload["conversation_history"], history)
 
-    def test_prepare_jules_request_payload_settings_override(self):
-        """Test _prepare_jules_request_payload with various prompt.settings configurations."""
+    def test_prepare_jules_request_payload_settings_hierarchy_and_features(self):
+        """Test full settings hierarchy and user_settings features in _prepare_jules_request_payload."""
 
-        # Case 1: No settings in PromptObject, executor defaults should apply
-        prompt_no_settings = self.create_prompt_object() # Uses self.prompt_content, settings will be None
-        payload_no_settings = self.executor._prepare_jules_request_payload(prompt_no_settings)
-        request_settings_no_override = payload_no_settings["prompt_payload"]["settings"]
-        self.assertEqual(request_settings_no_override["temperature"], 0.7) # Executor default
-        self.assertEqual(request_settings_no_override["max_tokens"], 500) # Executor default
-        self.assertEqual(request_settings_no_override["creativity_level_preference"], "balanced") # Executor default
+        # Executor defaults are: {"temperature": 0.7, "max_tokens": 500, "creativity_level_preference": "balanced"}
+        # Executor API key is "test_api_key" (from setUp)
 
-        # Case 2: PromptObject with specific settings overriding some defaults
-        prompt_with_some_settings = self.create_prompt_object()
-        prompt_with_some_settings.settings = {"temperature": 0.9, "custom_param": "value123"}
-        payload_some_settings = self.executor._prepare_jules_request_payload(prompt_with_some_settings)
-        request_settings_some_override = payload_some_settings["prompt_payload"]["settings"]
-        self.assertEqual(request_settings_some_override["temperature"], 0.9) # Overridden
-        self.assertEqual(request_settings_some_override["max_tokens"], 500) # Still executor default
-        self.assertEqual(request_settings_some_override["creativity_level_preference"], "balanced") # Still executor default
-        self.assertEqual(request_settings_some_override["custom_param"], "value123") # Custom one added
+        # Case 1: Only Executor defaults
+        prompt1 = self.create_prompt_object() # settings=None
+        user_settings1 = None
+        payload1 = self.executor._prepare_jules_request_payload(prompt1, user_settings=user_settings1)
+        settings1 = payload1["prompt_payload"]["settings"]
+        self.assertEqual(settings1["temperature"], 0.7)
+        self.assertEqual(settings1["max_tokens"], 500)
+        self.assertEqual(payload1["api_key"], "test_api_key")
+        self.assertNotIn("user_preferences", payload1)
 
-        # Case 3: PromptObject overriding all defaults and adding new ones
-        prompt_with_all_settings = self.create_prompt_object()
-        prompt_with_all_settings.settings = {
-            "temperature": 0.5,
-            "max_tokens": 150,
-            "creativity_level_preference": "high",
-            "another_setting": "test"
-        }
-        payload_all_settings = self.executor._prepare_jules_request_payload(prompt_with_all_settings)
-        request_settings_all_override = payload_all_settings["prompt_payload"]["settings"]
-        self.assertEqual(request_settings_all_override["temperature"], 0.5)
-        self.assertEqual(request_settings_all_override["max_tokens"], 150)
-        self.assertEqual(request_settings_all_override["creativity_level_preference"], "high")
-        self.assertEqual(request_settings_all_override["another_setting"], "test")
+        # Case 2: UserSettings override Executor defaults
+        prompt2 = self.create_prompt_object() # settings=None
+        user_settings2 = UserSettings(
+            user_id="user123",
+            default_jules_api_key="user_api_key_123",
+            default_execution_settings={"temperature": 0.8, "max_tokens": 600},
+            preferred_output_language="fr-FR"
+        )
+        # Re-initialize executor with placeholder key to test user_settings.api_key override
+        executor_placeholder_key = JulesExecutor(api_key="YOUR_HYPOTHETICAL_API_KEY")
+        payload2 = executor_placeholder_key._prepare_jules_request_payload(prompt2, user_settings=user_settings2)
+        settings2 = payload2["prompt_payload"]["settings"]
+        self.assertEqual(settings2["temperature"], 0.8)
+        self.assertEqual(settings2["max_tokens"], 600)
+        self.assertEqual(payload2["api_key"], "user_api_key_123")
+        self.assertIn("user_preferences", payload2)
+        self.assertEqual(payload2["user_preferences"]["output_language_preference"], "fr-FR")
 
-        # Case 4: PromptObject settings with a None value for a key that has an executor default
-        # (should keep executor default as per current _prepare_jules_request_payload logic)
-        prompt_with_none_setting_val = self.create_prompt_object()
-        prompt_with_none_setting_val.settings = {"temperature": None, "max_tokens": 250}
-        payload_none_setting_val = self.executor._prepare_jules_request_payload(prompt_with_none_setting_val)
-        request_settings_none_val = payload_none_setting_val["prompt_payload"]["settings"]
-        self.assertEqual(request_settings_none_val["temperature"], 0.7) # Executor default because prompt's was None
-        self.assertEqual(request_settings_none_val["max_tokens"], 250)   # Overridden by prompt
+        # Case 2b: UserSettings API key does NOT override a non-placeholder executor API key
+        payload2b = self.executor._prepare_jules_request_payload(prompt2, user_settings=user_settings2) # self.executor has "test_api_key"
+        self.assertEqual(payload2b["api_key"], "test_api_key")
 
-        # Case 5: PromptObject settings is an empty dictionary
-        prompt_with_empty_settings = self.create_prompt_object()
-        prompt_with_empty_settings.settings = {}
-        payload_empty_settings = self.executor._prepare_jules_request_payload(prompt_with_empty_settings)
-        request_settings_empty = payload_empty_settings["prompt_payload"]["settings"]
-        self.assertEqual(request_settings_empty["temperature"], 0.7) # Executor default
-        self.assertEqual(request_settings_empty["max_tokens"], 500) # Executor default
-        self.assertEqual(request_settings_empty["creativity_level_preference"], "balanced") # Executor default
+
+        # Case 3: PromptObject.settings override UserSettings and Executor defaults
+        prompt3 = self.create_prompt_object()
+        prompt3.settings = {"temperature": 0.9, "max_tokens": 700, "custom_prompt_setting": "prompt_value"}
+        user_settings3 = UserSettings( # User settings are different
+            user_id="user123",
+            default_execution_settings={"temperature": 0.1, "max_tokens": 100, "user_default_setting": "user_value"}
+        )
+        payload3 = self.executor._prepare_jules_request_payload(prompt3, user_settings=user_settings3)
+        settings3 = payload3["prompt_payload"]["settings"]
+        self.assertEqual(settings3["temperature"], 0.9) # Prompt overrides User and Executor
+        self.assertEqual(settings3["max_tokens"], 700)   # Prompt overrides User and Executor
+        self.assertEqual(settings3["user_default_setting"], "user_value") # From User (not in Prompt)
+        self.assertEqual(settings3["custom_prompt_setting"], "prompt_value") # From Prompt
+        self.assertEqual(settings3["creativity_level_preference"], "balanced") # From Executor (not in Prompt or User)
+
+        # Case 4: PromptObject.settings has a None value for a key
+        prompt4 = self.create_prompt_object()
+        prompt4.settings = {"temperature": None, "max_tokens": 750}
+        user_settings4 = UserSettings(user_id="user123", default_execution_settings={"temperature": 0.2})
+        payload4 = self.executor._prepare_jules_request_payload(prompt4, user_settings=user_settings4)
+        settings4 = payload4["prompt_payload"]["settings"]
+        # prompt.settings.temperature is None, so it falls back to user_settings.default_execution_settings.temperature
+        self.assertEqual(settings4["temperature"], 0.2)
+        self.assertEqual(settings4["max_tokens"], 750) # From prompt
+
+        # Case 5: PromptObject.settings is None, UserSettings.default_execution_settings has a None value
+        prompt5 = self.create_prompt_object() # settings=None
+        user_settings5 = UserSettings(user_id="user123", default_execution_settings={"temperature": None, "max_tokens": 250})
+        payload5 = self.executor._prepare_jules_request_payload(prompt5, user_settings=user_settings5)
+        settings5 = payload5["prompt_payload"]["settings"]
+        self.assertEqual(settings5["temperature"], 0.7) # Falls back to Executor default
+        self.assertEqual(settings5["max_tokens"], 250) # From UserSettings
 
     # --- Tests for execute_prompt dynamic responses ---
     def test_execute_prompt_default_success(self):
         prompt = self.create_prompt_object(task_override="A normal task.")
-        response = self.executor.execute_prompt(prompt)
+        response = self.executor.execute_prompt(prompt, user_settings=None)
         self.assertTrue(response.was_successful)
         self.assertIn("Simulated successful response to task: 'A normal task.'", response.content)
         self.assertIsNone(response.error_message)
@@ -120,7 +140,7 @@ class TestJulesExecutor(unittest.TestCase):
 
     def test_execute_prompt_simulated_content_policy_error(self):
         prompt = self.create_prompt_object(task_override="error_test:content_policy trigger")
-        response = self.executor.execute_prompt(prompt)
+        response = self.executor.execute_prompt(prompt, user_settings=None)
         self.assertFalse(response.was_successful)
         self.assertIsNone(response.content)
         self.assertIn("Simulated content policy violation", response.error_message)
@@ -128,14 +148,14 @@ class TestJulesExecutor(unittest.TestCase):
 
     def test_execute_prompt_simulated_overload_error(self):
         prompt = self.create_prompt_object(task_override="error_test:overload trigger")
-        response = self.executor.execute_prompt(prompt)
+        response = self.executor.execute_prompt(prompt, user_settings=None)
         self.assertFalse(response.was_successful)
         self.assertIn("Simulated model overload", response.error_message)
         self.assertEqual(response.raw_jules_response["error"]["code"], "JULES_ERR_MODEL_OVERLOADED")
 
     def test_execute_prompt_simulated_auth_error(self):
         prompt = self.create_prompt_object(task_override="error_test:auth trigger")
-        response = self.executor.execute_prompt(prompt)
+        response = self.executor.execute_prompt(prompt, user_settings=None)
         self.assertFalse(response.was_successful)
         self.assertIn("Simulated authentication failure", response.error_message)
         self.assertEqual(response.raw_jules_response["error"]["code"], "AUTH_FAILURE")
@@ -145,7 +165,7 @@ class TestJulesExecutor(unittest.TestCase):
 
     def test_execute_prompt_short_task_advisory(self):
         prompt = self.create_prompt_object(task_override="Hi") # Less than 3 words
-        response = self.executor.execute_prompt(prompt)
+        response = self.executor.execute_prompt(prompt, user_settings=None)
         self.assertTrue(response.was_successful)
         self.assertIn("Task 'Hi' is very short. For a better simulated response, please elaborate", response.content)
 
@@ -155,7 +175,7 @@ class TestJulesExecutor(unittest.TestCase):
         # Ensure prompt_object is a new instance for the turn
         turn_prompt_object = PromptObject(role=prompt.role, context=prompt.context, task=prompt.task, constraints=prompt.constraints, examples=prompt.examples)
         turn = PromptTurn(prompt_object=turn_prompt_object)
-        response = self.executor.execute_conversation_turn(turn, [])
+        response = self.executor.execute_conversation_turn(turn, [], user_settings=None)
 
         self.assertTrue(response.was_successful)
         # The content check needs to be more specific to what execute_conversation_turn generates
@@ -169,7 +189,7 @@ class TestJulesExecutor(unittest.TestCase):
         turn_prompt_object = PromptObject(role=prompt.role, context=prompt.context, task=prompt.task, constraints=prompt.constraints, examples=prompt.examples)
         turn = PromptTurn(prompt_object=turn_prompt_object)
         history = [{"speaker": "user", "text": "Previous user query"}, {"speaker": "ai", "text": "Previous AI answer"}]
-        response = self.executor.execute_conversation_turn(turn, history)
+        response = self.executor.execute_conversation_turn(turn, history, user_settings=None)
 
         self.assertTrue(response.was_successful)
         self.assertIn(f"Simulated response to turn: '{turn_prompt_object.task}'", response.content)
@@ -189,7 +209,7 @@ class TestJulesExecutor(unittest.TestCase):
         prompt = self.create_prompt_object(task_override="error_test:content_policy in conversation")
         turn_prompt_object = PromptObject(role=prompt.role, context=prompt.context, task=prompt.task, constraints=prompt.constraints, examples=prompt.examples)
         turn = PromptTurn(prompt_object=turn_prompt_object)
-        response = self.executor.execute_conversation_turn(turn, [])
+        response = self.executor.execute_conversation_turn(turn, [], user_settings=None)
 
         self.assertFalse(response.was_successful)
         self.assertIn(f"Simulated content policy violation for turn '{turn.turn_id}'", response.error_message)
@@ -199,7 +219,7 @@ class TestJulesExecutor(unittest.TestCase):
         prompt = self.create_prompt_object(task_override="error_test:overload in conversation")
         turn_prompt_object = PromptObject(role=prompt.role, context=prompt.context, task=prompt.task, constraints=prompt.constraints, examples=prompt.examples)
         turn = PromptTurn(prompt_object=turn_prompt_object)
-        response = self.executor.execute_conversation_turn(turn, [])
+        response = self.executor.execute_conversation_turn(turn, [], user_settings=None)
 
         self.assertFalse(response.was_successful)
         self.assertIn(f"Simulated model overload for turn '{turn.turn_id}'", response.error_message)

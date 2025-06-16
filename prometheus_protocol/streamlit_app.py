@@ -66,9 +66,8 @@ try:
         TemplateCorruptedError, # For TemplateManager
         ConversationCorruptedError # For ConversationManager
     )
-    # UserSettings might be needed if we integrate it, but not in the provided code yet.
-    # from prometheus_protocol.core.user_settings import UserSettings
-    # from prometheus_protocol.core.user_settings_manager import UserSettingsManager
+    from prometheus_protocol.core.user_settings import UserSettings
+    from prometheus_protocol.core.user_settings_manager import UserSettingsManager
 
     # Initialize managers and core components
     # These should be initialized once. Streamlit's execution model reruns the script,
@@ -76,19 +75,60 @@ try:
     # or objects that need to maintain state across reruns IF that state isn't in st.session_state.
     # For file-based managers, re-initializing on each run is usually fine if paths are consistent.
 
+    DEFAULT_USER_ID = "default_streamlit_user" # App-wide default user ID
+
     @st.cache_resource # Cache resource for managers & executors
     def get_core_components():
         base_data_path = "prometheus_protocol_data_streamlit" # Store data in a subfolder
         tm = TemplateManager(templates_dir=os.path.join(base_data_path, "templates"))
         cm = ConversationManager(conversations_dir=os.path.join(base_data_path, "conversations"))
-        # usm = UserSettingsManager(settings_base_dir=os.path.join(base_data_path, "user_settings"))
-        je = JulesExecutor() # Our robust simulated executor
-        co = ConversationOrchestrator(jules_executor=je)
-        ri = RiskIdentifier()
-        return tm, cm, je, co, ri #, usm
+        usm = UserSettingsManager(settings_base_dir=os.path.join(base_data_path, "user_settings"))
 
-    template_manager, conversation_manager, jules_executor, conversation_orchestrator, risk_identifier = get_core_components()
-    # user_settings_manager = get_core_components()[5] # If UserSettingsManager was included
+        # Load or create default user settings
+        user_settings = usm.load_settings(DEFAULT_USER_ID)
+        if user_settings is None:
+            print(f"No settings found for {DEFAULT_USER_ID}, creating defaults.")
+            user_settings = UserSettings(
+                user_id=DEFAULT_USER_ID,
+                default_jules_api_key="YOUR_HYPOTHETICAL_API_KEY", # Default placeholder
+                default_jules_model="jules-xl-default-model",
+                default_execution_settings={"temperature": 0.77, "max_tokens": 550},
+                ui_theme="light",
+                preferred_output_language="en-US",
+                creative_catalyst_defaults={"RolePersonaGenerator_creativity": "balanced"}
+            )
+            try:
+                usm.save_settings(user_settings)
+                print(f"Default settings saved for {DEFAULT_USER_ID}")
+            except Exception as e_usm_save:
+                print(f"Error saving initial default user settings: {e_usm_save}")
+                # Continue with in-memory default user_settings even if save fails
+
+        je = JulesExecutor() # Our robust simulated executor
+        # Initialize CO with the loaded/default user_settings. This instance might be replaced later if settings change.
+        co = ConversationOrchestrator(jules_executor=je, user_settings=user_settings)
+        ri = RiskIdentifier()
+        return tm, cm, je, co, ri, usm, user_settings
+
+    components_tuple = get_core_components()
+    template_manager = components_tuple[0]
+    conversation_manager = components_tuple[1]
+    jules_executor_instance = components_tuple[2] # The cached one from get_core_components
+    # CO will be re-initialized with session_state.user_settings later
+    # conversation_orchestrator_instance initially from get_core_components
+    risk_identifier = components_tuple[4]
+    user_settings_manager = components_tuple[5]
+
+    # Ensure st.session_state.user_settings exists and is current
+    if 'user_settings' not in st.session_state:
+        st.session_state.user_settings = components_tuple[6] # Initial load from get_core_components
+
+    # Re-initialize ConversationOrchestrator with the potentially updated user_settings from session state
+    # This is important if user settings are changed and need to be reflected immediately in new conversation runs.
+    conversation_orchestrator_instance = ConversationOrchestrator(
+        jules_executor=jules_executor_instance,
+        user_settings=st.session_state.user_settings
+    )
 
 except ImportError as e:
     st.error(f"Critical Error: Failed to import Prometheus Protocol core modules: {e}")
@@ -215,11 +255,12 @@ st.sidebar.title("Prometheus Protocol")
 st.sidebar.markdown("### The Architect's Code for AI Mastery")
 
 # Use st.session_state.menu_choice for persistence across reruns
+navigation_options = ("Dashboard", "Prompt Editor", "Conversation Composer", "Template Library", "Conversation Library", "User Settings")
 st.session_state.menu_choice = st.sidebar.radio(
     "Navigate Your Digital Ecosystem:",
-    ("Dashboard", "Prompt Editor", "Conversation Composer", "Template Library", "Conversation Library"),
-    key='main_menu_selector', # Add a key for radio button
-    index=["Dashboard", "Prompt Editor", "Conversation Composer", "Template Library", "Conversation Library"].index(st.session_state.menu_choice)
+    navigation_options,
+    key='main_menu_selector',
+    index=navigation_options.index(st.session_state.menu_choice if st.session_state.menu_choice in navigation_options else "Dashboard")
 )
 menu_choice = st.session_state.menu_choice
 
@@ -417,7 +458,10 @@ elif menu_choice == "Prompt Editor":
 
                 if proceed_after_risk_check:
                     with st.spinner("Engaging Jules..."):
-                        st.session_state.last_ai_response_single = jules_executor.execute_prompt(prompt)
+                        st.session_state.last_ai_response_single = jules_executor_instance.execute_prompt(
+                            prompt,
+                            user_settings=st.session_state.user_settings
+                        )
                     st.experimental_rerun() # Rerun to display response below
 
     # --- Feedback Display Area ---
@@ -598,7 +642,8 @@ elif menu_choice == "Conversation Composer":
                     with st.spinner("Orchestrating dialogue with Jules... This may take a moment."):
                         # Pass a copy to the orchestrator to avoid modifications to session state object during run
                         convo_to_run = Conversation(**st.session_state.current_conversation_object.to_dict())
-                        st.session_state.conversation_run_results = conversation_orchestrator.run_full_conversation(convo_to_run)
+                        # Use the orchestrator instance that has the latest user_settings
+                        st.session_state.conversation_run_results = conversation_orchestrator_instance.run_full_conversation(convo_to_run)
                     st.experimental_rerun() # Rerun to show results
 
     # --- Conversation Log / Run Results ---
@@ -783,6 +828,84 @@ elif menu_choice == "Conversation Library":
 
     except Exception as e:
         st.error(f"Error loading conversation library: {e}")
+
+elif menu_choice == "User Settings":
+    st.header("Your Personal Preferences: User Settings")
+
+    if 'user_settings' not in st.session_state or st.session_state.user_settings is None:
+        st.error("User settings not loaded. Please restart or check configuration.")
+        st.stop()
+
+    st.markdown(f"Editing settings for User ID: `{st.session_state.user_settings.user_id}`")
+
+    us = st.session_state.user_settings # Get current settings from session state
+
+    # Display current settings (some as editable, some as st.write for complex dicts)
+    new_api_key = st.text_input(
+        "Jules API Key (conceptual)",
+        value=us.default_jules_api_key if us.default_jules_api_key else "",
+        type="password",
+        help="This is stored locally in a JSON file for this demo."
+    )
+    new_model = st.text_input("Default Jules Model", value=us.default_jules_model if us.default_jules_model else "")
+
+    current_theme_index = 0 # Default to light
+    theme_options = ["light", "dark", "system_default"]
+    if us.ui_theme and us.ui_theme in theme_options:
+        current_theme_index = theme_options.index(us.ui_theme)
+    new_theme = st.selectbox("UI Theme", theme_options, index=current_theme_index)
+
+    new_lang = st.text_input("Preferred Output Language (e.g., en-US)", value=us.preferred_output_language if us.preferred_output_language else "")
+
+    st.markdown("**Default Execution Settings (JSON):**")
+    exec_settings_str = json.dumps(us.default_execution_settings, indent=2) if us.default_execution_settings else "{}"
+    new_exec_settings_str = st.text_area("Default Execution Settings JSON", value=exec_settings_str, height=150)
+
+    st.markdown("**Creative Catalyst Defaults (JSON):**")
+    catalyst_defaults_str = json.dumps(us.creative_catalyst_defaults, indent=2) if us.creative_catalyst_defaults else "{}"
+    new_catalyst_defaults_str = st.text_area("Creative Catalyst Defaults JSON", value=catalyst_defaults_str, height=100)
+
+    if st.button("Save User Settings"):
+        # Update the session state object
+        us.default_jules_api_key = new_api_key if new_api_key else None
+        us.default_jules_model = new_model if new_model else None
+        us.ui_theme = new_theme
+        us.preferred_output_language = new_lang if new_lang else None
+
+        try:
+            us.default_execution_settings = json.loads(new_exec_settings_str)
+        except json.JSONDecodeError:
+            st.error("Invalid JSON for Default Execution Settings. Not saved.")
+
+        try:
+            us.creative_catalyst_defaults = json.loads(new_catalyst_defaults_str)
+        except json.JSONDecodeError:
+            st.error("Invalid JSON for Creative Catalyst Defaults. Not saved.")
+
+        us.touch() # Update last_updated_at
+
+        try:
+            user_settings_manager.save_settings(us)
+            st.success("User settings saved successfully!")
+            st.session_state.user_settings = us # Ensure session state has the saved version
+
+            # Re-initialize ConversationOrchestrator with new settings
+            # This is important because CO might hold a reference to the old settings object
+            # or its behavior might depend on settings at init time.
+            # For this app, we create a new CO instance with new settings.
+            # Note: jules_executor_instance is cached and its internal state isn't changed by UserSettings directly,
+            # UserSettings are passed to its methods.
+            st.session_state.conversation_orchestrator_instance = ConversationOrchestrator(
+                jules_executor=jules_executor_instance, # The globally cached JE
+                user_settings=st.session_state.user_settings # The updated user settings
+            )
+            st.experimental_rerun()
+        except Exception as e_save_us:
+            st.error(f"Error saving user settings: {e_save_us}")
+
+    st.markdown("---")
+    with st.expander("Current UserSettings Object (Raw Data)"):
+        st.json(us.to_dict())
 
 
 # --- Footer (Conceptual) ---

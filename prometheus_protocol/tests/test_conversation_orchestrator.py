@@ -9,13 +9,24 @@ from prometheus_protocol.core.conversation import Conversation, PromptTurn
 from prometheus_protocol.core.prompt import PromptObject
 from prometheus_protocol.core.ai_response import AIResponse
 from datetime import datetime, timezone # For creating AIResponse timestamps
+from prometheus_protocol.core.user_settings import UserSettings
+
 
 class TestConversationOrchestrator(unittest.TestCase):
 
     def setUp(self):
         """Set up a mock JulesExecutor and ConversationOrchestrator for each test."""
         self.mock_jules_executor = MagicMock(spec=JulesExecutor)
-        self.orchestrator = ConversationOrchestrator(jules_executor=self.mock_jules_executor)
+        self.user_settings_default = None
+        self.orchestrator = ConversationOrchestrator(
+            jules_executor=self.mock_jules_executor,
+            user_settings=self.user_settings_default
+        )
+        self.sample_user_settings = UserSettings(
+            user_id="test_user_for_orchestrator",
+            default_execution_settings={"temperature": 0.22},
+            preferred_output_language="eo" # Esperanto for distinctness
+        )
 
     def _create_dummy_prompt_object(self, task_text: str, prompt_id=None, version=1) -> PromptObject:
         return PromptObject(
@@ -88,12 +99,14 @@ class TestConversationOrchestrator(unittest.TestCase):
         self.assertEqual(turn_responses[turn2_id].source_conversation_id, conversation_id)
 
         # Check history passed to the second call
-        history_for_turn2 = self.mock_jules_executor.execute_conversation_turn.call_args_list[1][0][1] # args[1] is current_conversation_history
+        args_call2, kwargs_call2 = self.mock_jules_executor.execute_conversation_turn.call_args_list[1]
+        history_for_turn2 = args_call2[1] # history is the second positional argument
         expected_history_for_turn2 = [
             {"speaker": "user", "text": "Task for Turn 1"},
             {"speaker": "ai", "text": response1_content}
         ]
         self.assertEqual(history_for_turn2, expected_history_for_turn2)
+        self.assertEqual(kwargs_call2.get('user_settings'), self.user_settings_default) # Check user_settings
 
 
     def test_run_full_conversation_halts_on_error(self):
@@ -170,23 +183,53 @@ class TestConversationOrchestrator(unittest.TestCase):
         calls = self.mock_jules_executor.execute_conversation_turn.call_args_list
 
         # Call 1 (Turn 0)
-        history_call1 = calls[0][0][1] # args[1] is current_conversation_history
+        args_call1, kwargs_call1 = calls[0]
+        history_call1 = args_call1[1]
         self.assertEqual(history_call1, [])
+        self.assertEqual(kwargs_call1.get('user_settings'), self.user_settings_default)
 
         # Call 2 (Turn 1)
-        history_call2 = calls[1][0][1]
+        args_call2, kwargs_call2 = calls[1]
+        history_call2 = args_call2[1]
         expected_history_call2 = [
             {"speaker": "user", "text": "Task T1"}, {"speaker": "ai", "text": "Resp T1"}
         ]
         self.assertEqual(history_call2, expected_history_call2)
+        self.assertEqual(kwargs_call2.get('user_settings'), self.user_settings_default)
 
         # Call 3 (Turn 2)
-        history_call3 = calls[2][0][1]
+        args_call3, kwargs_call3 = calls[2]
+        history_call3 = args_call3[1]
         expected_history_call3 = [
             {"speaker": "user", "text": "Task T1"}, {"speaker": "ai", "text": "Resp T1"},
             {"speaker": "user", "text": "Task T2"}, {"speaker": "ai", "text": "Resp T2"}
         ]
         self.assertEqual(history_call3, expected_history_call3)
+        self.assertEqual(kwargs_call3.get('user_settings'), self.user_settings_default)
+
+    def test_run_full_conversation_with_specific_user_settings(self):
+        """Test that specific UserSettings are passed to the executor."""
+        turn1 = self._create_dummy_prompt_turn("Task for Turn 1")
+        conversation = Conversation(title="Test UserSettings Pass Convo", turns=[turn1])
+
+        # Create an orchestrator with specific user settings for this test
+        orchestrator_with_settings = ConversationOrchestrator(
+            jules_executor=self.mock_jules_executor,
+            user_settings=self.sample_user_settings
+        )
+
+        # Configure mock to return a basic successful response
+        self.mock_jules_executor.execute_conversation_turn.return_value = self._create_dummy_ai_response(
+            "Test content", prompt_id=turn1.prompt_object.prompt_id, version=turn1.prompt_object.version, turn_id=turn1.turn_id
+        )
+
+        orchestrator_with_settings.run_full_conversation(conversation)
+
+        self.mock_jules_executor.execute_conversation_turn.assert_called_once()
+        # Check the user_settings kwarg in the call
+        called_kwargs = self.mock_jules_executor.execute_conversation_turn.call_args.kwargs
+        self.assertEqual(called_kwargs.get('user_settings'), self.sample_user_settings)
+        self.assertEqual(called_kwargs.get('user_settings').preferred_output_language, "eo")
 
 if __name__ == '__main__':
     unittest.main()
