@@ -100,4 +100,4 @@ Join me in forging the protocols that will define the next era of AI mastery.
 ---
 
 **Josephis K. Wade** - The Architect, CEO of InfiniTec LLC.
-*(Contact: [Your GitHub email or designated project email])*.
+*(Contact: [Josephiswade397@gmail.com)*.
