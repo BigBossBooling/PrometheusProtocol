@@ -130,6 +130,15 @@ This section outlines the primary Python data classes and enumerations defined i
     *   **Key Attributes:** `user_id`, `default_jules_api_key`, `default_jules_model`, `default_execution_settings` (for `PromptObject`), `ui_theme`, `preferred_output_language`, `creative_catalyst_defaults`, `last_updated_at`.
     *   **Key Methods:** `to_dict()`, `from_dict()`, `touch()`.
 
+*   **`PreanalysisSeverity` (Enum)** ([`core/preanalysis_types.py`](./core/preanalysis_types.py))
+    *   **Purpose:** Defines severity levels (INFO, SUGGESTION, WARNING) for findings from the Prompt Pre-analysis Module.
+    *   **Key Values:** `INFO`, `SUGGESTION`, `WARNING`.
+
+*   **`PreanalysisFinding`** ([`core/preanalysis_types.py`](./core/preanalysis_types.py))
+    *   **Purpose:** Represents a single finding or suggestion from a pre-analysis check.
+    *   **Key Attributes:** `check_name`, `severity` (PreanalysisSeverity), `message`, `details`, `ui_target_field`.
+    *   **Key Methods:** `to_dict()`, `from_dict()`.
+
 *   **Core Custom Exceptions** ([`core/exceptions.py`](./core/exceptions.py))
     *   **Purpose:** A suite of custom exceptions used for specific error conditions within Prometheus Protocol, generally inheriting from `PromptValidationError` or `ValueError`.
     *   **Key Examples:** `PromptValidationError`, `MissingRequiredFieldError`, `UnresolvedPlaceholderError`, `RepetitiveListItemError`, `TemplateCorruptedError`, `ConversationCorruptedError`, `UserSettingsCorruptedError`.
@@ -207,6 +216,13 @@ This section describes the main classes, functions, and conceptual components th
     *   **Core Functionality:** Handles user-specific file path generation (based on its configured base path), JSON serialization/deserialization of `UserSettings` objects, and error handling.
     *   **Operates On:** `AppConfig`, `UserSettings`, file system.
     *   **Produces/Consumes:** `UserSettings` instances, JSON files.
+
+*   **`PromptAnalyzer` (V1 Stub)** ([`core/prompt_analyzer.py`](./core/prompt_analyzer.py))
+    *   **Responsibility:** (Conceptually) Performs pre-analysis checks on `PromptObject`s for aspects like readability, constraint actionability, and token estimation, complementing GIGO/Risk feedback.
+    *   **Key Method:** `analyze_prompt(prompt: PromptObject) -> List[PreanalysisFinding]`
+    *   **Core Functionality (V1 Stub):** Contains stub methods for individual checks (`check_readability`, `check_constraint_actionability`, `estimate_input_tokens`) that return dummy/conceptual `PreanalysisFinding` objects. The `analyze_prompt` method aggregates these.
+    *   **Operates On:** `PromptObject`.
+    *   **Produces:** `List[PreanalysisFinding]`.
 
 ---
 
@@ -312,10 +328,10 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Status: V2+ Major Feature Area / Future Conceptualization**
     *   **Summary:** While the `UserSettings` dataclass and `UserSettingsManager` provide basic persistence for user preferences, a full User Account Management system (registration, login, profiles) and a comprehensive UI for managing all global user settings (including secure API key management beyond local files) are significant V2+ undertakings.
 
-6.  **Implement "Prompt Pre-analysis Module" (beyond V1 conceptualization):**
-    *   **Status:** V1 Concepts Defined
-    *   **Summary:** The foundational concepts for a "Prompt Pre-analysis Module" – including initial checks like readability, constraint actionability, token estimation, the `PreanalysisFinding` data structure, and basic UI integration ideas – have been documented in [`concepts/prompt_preanalysis_module.md`](./concepts/prompt_preanalysis_module.md).
-    *   **Next Steps (Future Work):** Detailed design of heuristic algorithms for each specific pre-analysis check, implementation of the module's core logic in Python (e.g., a new class or functions), full integration into the `PromptObject` editor UI based on the concepts, and addition of relevant unit tests for the analysis functions.
+6.  **Implement "Prompt Pre-analysis Module":**
+    *   **Status:** Partially Implemented (Dataclass & Stubs Created; Basic UI Integration for Conceptual Display)
+    *   **Summary:** The `PreanalysisSeverity` enum and `PreanalysisFinding` dataclass are defined in [`core/preanalysis_types.py`](./core/preanalysis_types.py). A `PromptAnalyzer` class with stub methods for readability, constraint actionability, and token estimation (returning dummy findings) is implemented in [`core/prompt_analyzer.py`](./core/prompt_analyzer.py). The `streamlit_app.py` UI includes an "[Analyze Prompt Quality]" button in the Prompt Editor, which calls these stubs and displays the conceptual findings. Basic unit tests for the new types and analyzer stubs are in place.
+    *   **Next Steps (Future Work):** Detailed design and implementation of heuristic algorithms or simple NLP techniques for each specific pre-analysis check within `PromptAnalyzer`. Richer UI integration for findings (e.g., linking findings directly to UI fields). Comprehensive unit tests for the actual analysis logic once implemented.
 
 7.  **Implement and Integrate "System State & Context Management" (beyond V1 conceptualization):**
     *   **Status:** **Partially Implemented (Backend Managers Refactored; Basic UI Context Selector Added for V1)**

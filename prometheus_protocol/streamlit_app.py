@@ -68,6 +68,8 @@ try:
     )
     from prometheus_protocol.core.user_settings import UserSettings
     from prometheus_protocol.core.user_settings_manager import UserSettingsManager
+    from prometheus_protocol.core.prompt_analyzer import PromptAnalyzer
+    from prometheus_protocol.core.preanalysis_types import PreanalysisSeverity # For severity checking in display
 
 
 # --- Constants for Context Management ---
@@ -121,14 +123,14 @@ CONTEXT_OPTIONS_NAMES = list(AVAILABLE_CONTEXTS.keys())
         # Initialize CO with the loaded/default user_settings. This instance might be replaced later if settings change.
         co = ConversationOrchestrator(jules_executor=je, user_settings=user_settings)
         ri = RiskIdentifier()
-        return tm, cm, je, co, ri, usm, user_settings
+        prompt_analyzer = PromptAnalyzer()
+        return tm, cm, je, co, ri, usm, user_settings, prompt_analyzer
 
     components_tuple = get_core_components()
     template_manager = components_tuple[0]
     conversation_manager = components_tuple[1]
     jules_executor_instance = components_tuple[2] # The cached one from get_core_components
-    # CO will be re-initialized with session_state.user_settings later
-    # conversation_orchestrator_instance initially from get_core_components
+    # CO will be re-initialized with session_state.user_settings later if user_settings changes
     risk_identifier = components_tuple[4]
     user_settings_manager = components_tuple[5]
 
@@ -136,12 +138,19 @@ CONTEXT_OPTIONS_NAMES = list(AVAILABLE_CONTEXTS.keys())
     if 'user_settings' not in st.session_state:
         st.session_state.user_settings = components_tuple[6] # Initial load from get_core_components
 
+    prompt_analyzer_instance = components_tuple[7] # New
+
     # Re-initialize ConversationOrchestrator with the potentially updated user_settings from session state
     # This is important if user settings are changed and need to be reflected immediately in new conversation runs.
-    conversation_orchestrator_instance = ConversationOrchestrator(
-        jules_executor=jules_executor_instance,
-        user_settings=st.session_state.user_settings
-    )
+    # Let's store it in session_state if it's not there, or if settings changed.
+    if 'conversation_orchestrator' not in st.session_state or \
+       st.session_state.conversation_orchestrator.user_settings is not st.session_state.user_settings:
+        st.session_state.conversation_orchestrator = ConversationOrchestrator(
+            jules_executor=jules_executor_instance,
+            user_settings=st.session_state.user_settings
+        )
+    conversation_orchestrator_instance = st.session_state.conversation_orchestrator
+
 
 except ImportError as e:
     st.error(f"Critical Error: Failed to import Prometheus Protocol core modules: {e}")
@@ -251,6 +260,8 @@ if 'last_ai_response_single' not in st.session_state:
     st.session_state.last_ai_response_single = None
 if 'save_template_name_input' not in st.session_state:
     st.session_state.save_template_name_input = ""
+if 'preanalysis_findings' not in st.session_state:
+    st.session_state.preanalysis_findings = None
 
 # For Conversation Composer
 if 'current_conversation_object' not in st.session_state:
@@ -460,7 +471,7 @@ elif menu_choice == "Prompt Editor":
 
     # --- Actions ---
     st.markdown("---")
-    col_action1, col_action2, col_action3 = st.columns(3)
+    col_action1, col_action2, col_action3, col_action4 = st.columns(4) # Added one more column for Analyze
     with col_action1:
         if st.button("💾 Save as Template", key="pe_save_template"):
             # Use a text input for template name that persists via session_state if button is pressed
@@ -537,11 +548,47 @@ elif menu_choice == "Prompt Editor":
                         )
                     st.experimental_rerun() # Rerun to display response below
 
+    with col_action4: # New column for Analyze button
+        if st.button("🔍 Analyze Prompt Quality", key="pe_analyze_prompt"):
+            if st.session_state.current_prompt_object:
+                st.session_state.preanalysis_findings = prompt_analyzer_instance.analyze_prompt(
+                    st.session_state.current_prompt_object
+                )
+                st.experimental_rerun() # Rerun to ensure display consistency
+            else:
+                st.warning("No prompt loaded to analyze.")
+
     # --- Feedback Display Area ---
     st.markdown("---")
     st.subheader("Guidance & Diagnostics:")
     display_gigo_feedback(prompt) # Display GIGO feedback based on current state
     display_risk_feedback(prompt) # Display Risk feedback based on current state
+
+    # --- Pre-analysis Insights Display Area ---
+    if st.session_state.get('preanalysis_findings') is not None: # Check if analysis has been run
+        st.markdown("---")
+        st.subheader("🔬 Prompt Analysis Insights")
+        if not st.session_state.preanalysis_findings: # Empty list means no findings
+            st.info("No specific pre-analysis insights generated for this prompt at this time.")
+        else:
+            for finding in st.session_state.preanalysis_findings:
+                # Use Streamlit's alert types based on severity for visual distinction
+                if finding.severity == PreanalysisSeverity.INFO:
+                    st.info(f"ℹ️ **{finding.check_name}:** {finding.message}", icon="ℹ️")
+                elif finding.severity == PreanalysisSeverity.SUGGESTION:
+                    st.warning(f"💡 **{finding.check_name}:** {finding.message}", icon="💡")
+                elif finding.severity == PreanalysisSeverity.WARNING:
+                    # Using st.warning for pre-analysis "Warning" too, to distinguish from GIGO's st.error
+                    st.warning(f"⚠️ **{finding.check_name}:** {finding.message}", icon="⚠️")
+
+                if finding.details:
+                    with st.expander("Show Details", expanded=False):
+                        st.json(finding.details) # Display details dict as JSON
+
+        # Add a button to clear the analysis findings from view
+        if st.button("Clear Analysis Insights", key="pe_clear_analysis_insights"):
+            st.session_state.preanalysis_findings = None
+            st.experimental_rerun()
 
     # --- Response Display Area ---
     if st.session_state.get('last_ai_response_single'):
