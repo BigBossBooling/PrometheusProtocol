@@ -1,0 +1,204 @@
+name: Prometheus Protocol CI/CD Pipeline
+
+on:
+  # Controls when the workflow will run
+  # Triggers the workflow on push or pull request events for the "main" branch
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Ensure Code Quality & Formatting (Linting with Ruff, Formatting with Black)
+  lint_and_format:
+    name: Code Quality & Style
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9' # Specify a common Python version for linting/formatting (e.g., matching dev env)
+          cache: 'pip' # Cache pip dependencies for faster runs
+
+      - name: Install Linting & Formatting Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black  # ruff for linting/formatting, black for strict formatting
+          
+      - name: Run Ruff (Linter & Formatter Check)
+        # Checks for errors, potential bugs, and style issues, then checks formatting
+        run: |
+          ruff check . --statistics # Checks for errors and style issues
+          ruff format . --check    # Checks if files are formatted correctly (no changes made)
+          
+      - name: Run Black (Formatter Check)
+        # Enforce strict formatting check (no changes made to files)
+        run: |
+          black . --check           
+
+  # Job 2: Static Type Checking with MyPy
+  type_check:
+    name: Type Checking
+    runs-on: ubuntu-latest
+    needs: [lint_and_format] # This job depends on linting/formatting passing
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9' # Consistent Python version for type checking
+          cache: 'pip' # Cache pip dependencies
+
+      - name: Install Project Dependencies & MyPy
+        run: |
+          python -m pip install --upgrade pip
+          # Install core project dependencies from requirements.txt (if it exists)
+          # pip install -r requirements.txt 
+          pip install mypy # Install MyPy for static type analysis
+          # If your project uses specific external libraries, you might need their type stubs:
+          # pip install types-requests types-certifi # Example stubs
+          
+      - name: Run MyPy (Static Type Analysis)
+        # Run MyPy on our core package to catch type inconsistencies
+        run: mypy prometheus_protocol/core/ # Focus on the core logic package
+          
+  # Job 3: Comprehensive Unit Tests with Pytest
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    needs: [lint_and_format, type_check] # This job depends on linting and type checks passing
+    strategy:
+      matrix:
+        # Test across multiple Python versions to ensure compatibility
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12'] 
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip' # Cache pip dependencies
+
+      - name: Install Project & Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install core project dependencies from requirements.txt (if it exists)
+          # pip install -r requirements.txt
+          pip install pytest pytest-cov # Install pytest and pytest-cov for coverage
+
+      - name: Run Pytest with Coverage
+        # Run tests from the 'tests' directory and collect coverage for the 'prometheus_protocol' package
+        run: pytest prometheus_protocol/tests/ --cov=prometheus_protocol --cov-report=xml
+        env:
+          # Example: If you have an environment variable for simulated API keys for JulesExecutor
+          JULES_API_KEY_SIMULATED: 'mock_api_key_for_tests' # Ensure this matches JulesExecutor's expected env var if any
+      
+      - name: Upload coverage to Codecov (Optional, if using Codecov)
+        # Integrates with a code coverage service for detailed reporting
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # Secret token for code coverage service
+          fail_ci_if_error: true # Fail CI if coverage upload fails
+          
+  # Job 4: Security Vulnerability Scanning (Python Dependencies & Code)
+  security_scan:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: [build] # Assuming a 'build' job would compile/package, but for Python, tests are usually sufficient
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install Security Tools (e.g., Bandit, Safety)
+        run: |
+          pip install bandit safety
+          
+      - name: Run Bandit (Python Security Linter)
+        # Scans code for common security issues
+        run: bandit -r prometheus_protocol/core/ -ll -f json -o bandit_report.json # Scan core logic, output JSON
+        # Example: Add step to upload bandit_report.json as an artifact
+          
+      - name: Run Safety (Dependency Vulnerability Scanner)
+        # Checks installed dependencies against known vulnerability databases
+        run: safety check -r requirements.txt # Assuming requirements.txt
+        # If no requirements.txt, you might need to list packages or ensure a virtual env is active
+          
+  # Job 5: Check Documentation Integrity (for conceptual .md files)
+  check_documentation_integrity:
+    name: Check Docs Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Install Markdown Linting & Link Checking Tools
+        # Install tools to validate markdown and check for broken links
+        run: |
+          npm install -g markdownlint-cli # For markdown style/linting
+          npm install -g markdown-link-check # For broken link checking
+      - name: Run Markdown Linter
+        run: markdownlint prometheus_protocol/ui_concepts/ prometheus_protocol/concepts/ SYSTEM_OVERVIEW.md # Lint all conceptual docs
+      - name: Check Markdown Links
+        # Scans for broken links in markdown files (requires external network access)
+        run: find . -name "*.md" -print0 | xargs -0 -I{} markdown-link-check {}
+        
+  # Job 6 (Conceptual for full CI/CD): Build Documentation (e.g., Sphinx)
+  # build_docs:
+  #   name: Build Documentation
+  #   runs-on: ubuntu-latest
+  #   needs: [test] # Docs should build only if code is good
+  #   steps:
+  #     - name: Checkout Repository
+  #       uses: actions/checkout@v4
+  #     - name: Set up Python Environment
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.x'
+  #     - name: Install Docs Dependencies (e.g., Sphinx)
+  #       run: pip install sphinx sphinx_rtd_theme
+  #     - name: Build Sphinx Docs
+  #       run: sphinx-build docs/ _build/html # Assuming Sphinx docs are in 'docs/'
+
+  # Job 7 (Conceptual for full CI/CD): Deployment to Staging/Production
+  # This would be for deploying the Prometheus Protocol application itself,
+  # potentially a web service, or distributing the Python package.
+  # deploy:
+  #   name: Deploy Application
+  #   runs-on: ubuntu-latest
+  #   needs: [test, security_scan] # Or [build_docs] if docs are a release artifact
+  #   environment:
+  #     name: staging # Target environment (e.g., 'production' for live deploys)
+  #     url: 'https://staging.prometheusprotocol.com' # URL of your deployed app
+  #   steps:
+  #     - name: Checkout Repository
+  #       uses: actions/checkout@v4
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.9'
+  #     - name: Install Dependencies
+  #       run: pip install -r requirements.txt
+  #     - name: Deploy to Cloud Provider
+  #       # This step would involve commands to deploy the Prometheus Protocol application
+  #       # e.g., to a server, a container registry (Docker), or a PaaS (Heroku, Google Cloud Run)
+  #       # Requires cloud provider credentials configured as GitHub Secrets
+  #       run: |
+  #         echo "Deploying Prometheus Protocol to staging environment..."
+  #         # Add actual deployment commands here, e.g.,
+  #         # gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+  #         # gcloud run deploy prometheus-protocol --image gcr.io/your-project/prometheus-protocol
+  #         echo "Deployment successful!"
