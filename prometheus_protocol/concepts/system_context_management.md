@@ -90,6 +90,7 @@ Effective state management requires a clear understanding of how state variables
     *   Clicking "[New Conversation]" sets `current_editing_item_type` to "Conversation" and populates `st.session_state.current_conversation_object`. It clears any active single prompt context.
     *   Loading a template or conversation from a library updates `current_editing_item_type` and the relevant object in `st.session_state` (`current_prompt_object` or `current_conversation_object`).
     *   (Conceptual V1.x/V2) Selecting a workspace from a workspace switcher UI would update `active_workspace_id`.
+    *   Selecting a different context (e.g., "Personal Space," "Workspace Alpha") via the new sidebar context selector in `streamlit_app.py` directly updates `st.session_state.active_context_id`.
     *   Selecting a turn in the Conversation Composer updates `active_turn_id_in_composer`.
     *   Actions like initiating a delete operation set specific `ui_flags`.
 *   **System-Driven Changes (Indirect):** Some state might change as a result of system operations. For example, after saving a new version of a `PromptObject`, its `version` attribute (and thus the `current_editing_item_ref`'s data) is updated.
@@ -107,10 +108,19 @@ Effective state management requires a clear understanding of how state variables
 
 ### 2.4. Resetting or Clearing Context
 
-*   **Explicit Actions:**
-    *   Clicking "[New Prompt]" or "[New Conversation]" explicitly clears the other editing context (e.g., `current_conversation_object` is set to `None` when a new prompt is started).
-    *   Navigating away from an editor to a library view might clear the `current_editing_item_ref` if the item wasn't saved (or prompt the user to save "dirty" state - see Challenges).
-*   **Session End:** As mentioned, `st.session_state` is typically cleared when the user session truly ends (e.g., browser tab closed for a sufficient duration, or server restarts if not deployed with session persistence).
+*   **On Explicit Context Switch (via UI Selector):**
+    *   When the user selects a new context using the sidebar context selector in `streamlit_app.py`, several key session state variables are deliberately cleared or reset. This is crucial to prevent data from one context (e.g., a loaded prompt from "Personal Space") from being inappropriately carried over or displayed when switching to another context (e.g., "Workspace Alpha").
+    *   Cleared states include:
+        *   `st.session_state.current_prompt_object = None`
+        *   `st.session_state.current_conversation_object = None`
+        *   `st.session_state.last_ai_response_single = None`
+        *   `st.session_state.conversation_run_results = None`
+        *   Input field states for saving (e.g., `st.session_state.save_template_name_input = ""`, `st.session_state.save_conversation_name_input = ""`).
+        *   Dynamically generated UI flags (e.g., for delete confirmations like `confirm_delete_tpl_*`, `confirm_delete_cnv_*`) are also cleared.
+    *   This ensures a clean slate when viewing or interacting with resources in the newly selected context.
+*   **On Other Explicit Actions:**
+    *   As previously noted, clicking "[New Prompt]" or "[New Conversation]" also clears the *other* type of editing context.
+*   **Session End:** `st.session_state` is typically cleared when the user session truly ends.
 
 Understanding this lifecycle is key to designing predictable and intuitive UI flows, especially in Streamlit's execution model.
 
@@ -125,7 +135,7 @@ The managed state and context variables are crucial for orchestrating the behavi
 The Streamlit UI (`streamlit_app.py`) heavily relies on `st.session_state` to manage and react to context:
 
 1.  **Navigation and View Rendering:**
-    *   `st.session_state.current_ui_page` (e.g., "Dashboard", "PromptEditor") directly controls which main section of the UI is rendered. Changing this variable (e.g., via sidebar navigation) causes Streamlit to display the corresponding page.
+    *   `st.session_state.current_ui_page` (e.g., "Dashboard", "PromptEditor") directly controls which main section of the UI is rendered. Changing this variable (e.g., via sidebar navigation) causes Streamlit to display the corresponding page. The newly added sidebar context selector allows modification of `st.session_state.active_context_id`, which subsequently affects data displayed in library views and the context for save/load operations.
 
 2.  **Editor Content Loading:**
     *   The "PromptEditor" loads its content based on `st.session_state.current_prompt_object`.
@@ -134,7 +144,7 @@ The Streamlit UI (`streamlit_app.py`) heavily relies on `st.session_state` to ma
 
 3.  **Library Views (Template & Conversation Libraries):**
     *   **Conceptual Requirement:** To support personal vs. workspace resources, the library views would need to display items based on the `active_workspace_id` (if set) or the `current_user_id` (if `active_workspace_id` is `None`, indicating "Personal Space").
-    *   **Current `streamlit_app.py` V1 Implementation:** The managers (`template_manager`, `conversation_manager`) are initialized once by `@st.cache_resource` with fixed base paths (`prometheus_protocol_data_streamlit/templates` and `.../conversations`). This means the current V1 UI prototype *does not yet differentiate* between personal and workspace data; it shows everything within those fixed paths.
+    *   **Current `streamlit_app.py` V1 Implementation:** The managers (`template_manager`, `conversation_manager`) are initialized once by `@st.cache_resource` with a `data_storage_base_path`. A sidebar context selector now allows the user to change `st.session_state.active_context_id` between a default personal space ID and dummy workspace IDs. All manager calls (for listing, loading, saving, deleting) correctly pass this `active_context_id`. Thus, the UI *does* differentiate data based on the selected context, though full workspace creation and membership management are not yet implemented.
     *   **Future Interaction Model (Post V1 Collaboration Concepts):**
         *   When `active_workspace_id` changes, the manager instances might need to be re-initialized or have their target paths updated to point to the correct workspace-specific or user-specific directory (e.g., `data_root/workspaces/{workspace_id}/templates` vs. `data_root/users/{user_id}/personal/templates`).
         *   Alternatively, manager methods (`list_templates`, `load_template`, etc.) would need to accept a `context_id` (user or workspace) to construct paths internally. This is further discussed under "Backend Managers."

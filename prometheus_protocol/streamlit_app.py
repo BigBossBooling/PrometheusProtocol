@@ -69,13 +69,25 @@ try:
     from prometheus_protocol.core.user_settings import UserSettings
     from prometheus_protocol.core.user_settings_manager import UserSettingsManager
 
+
+# --- Constants for Context Management ---
+DEFAULT_USER_ID_FOR_STREAMLIT = "default_streamlit_user"
+DUMMY_WORKSPACE_ID_ALPHA = "ws_alpha_prototype"
+DUMMY_WORKSPACE_ID_BETA = "ws_beta_prototype"
+
+AVAILABLE_CONTEXTS = {
+    "My Personal Space": DEFAULT_USER_ID_FOR_STREAMLIT,
+    "Workspace Alpha (Shared)": DUMMY_WORKSPACE_ID_ALPHA,
+    "Workspace Beta (Shared)": DUMMY_WORKSPACE_ID_BETA,
+}
+CONTEXT_OPTIONS_NAMES = list(AVAILABLE_CONTEXTS.keys())
+
     # Initialize managers and core components
     # These should be initialized once. Streamlit's execution model reruns the script,
     # so using @st.cache_resource or similar is best practice for expensive objects
     # or objects that need to maintain state across reruns IF that state isn't in st.session_state.
     # For file-based managers, re-initializing on each run is usually fine if paths are consistent.
 
-    DEFAULT_USER_ID_FOR_STREAMLIT = "default_streamlit_user" # Renaming for clarity as per prompt, though DEFAULT_USER_ID existed
 
     @st.cache_resource # Cache resource for managers & executors
     def get_core_components():
@@ -85,11 +97,12 @@ try:
         usm = UserSettingsManager(settings_base_dir=os.path.join(base_data_path, "user_settings"))
 
         # Load or create default user settings
-        user_settings = usm.load_settings(DEFAULT_USER_ID_FOR_STREAMLIT) # Use new constant
+        # DEFAULT_USER_ID_FOR_STREAMLIT is now globally defined
+        user_settings = usm.load_settings(DEFAULT_USER_ID_FOR_STREAMLIT)
         if user_settings is None:
             print(f"No settings found for {DEFAULT_USER_ID_FOR_STREAMLIT}, creating defaults.")
             user_settings = UserSettings(
-                user_id=DEFAULT_USER_ID_FOR_STREAMLIT, # Use new constant
+                user_id=DEFAULT_USER_ID_FOR_STREAMLIT,
                 default_jules_api_key="YOUR_HYPOTHETICAL_API_KEY", # Default placeholder
                 default_jules_model="jules-xl-default-model",
                 default_execution_settings={"temperature": 0.77, "max_tokens": 550},
@@ -225,32 +238,35 @@ def display_ai_response(ai_response: AIResponse, turn_index: Optional[int] = Non
 st.set_page_config(layout="wide", page_title="Prometheus Protocol - The Architect's Code")
 
 # --- Session State Initialization (Crucial for Streamlit) ---
-# General state
 if 'menu_choice' not in st.session_state:
     st.session_state.menu_choice = "Dashboard"
 
-if 'active_context_id' not in st.session_state:
+if 'active_context_id' not in st.session_state: # For context switching
     st.session_state.active_context_id = DEFAULT_USER_ID_FOR_STREAMLIT
 
 # For Prompt Editor
-if 'current_prompt_object' not in st.session_state: # Renamed from current_prompt for clarity
+if 'current_prompt_object' not in st.session_state:
     st.session_state.current_prompt_object = None
-if 'last_ai_response_single' not in st.session_state: # For single prompt executions
+if 'last_ai_response_single' not in st.session_state:
     st.session_state.last_ai_response_single = None
-if 'save_template_name_input' not in st.session_state: # To hold text_input state for save
+if 'save_template_name_input' not in st.session_state:
     st.session_state.save_template_name_input = ""
 
-
 # For Conversation Composer
-if 'current_conversation_object' not in st.session_state: # Renamed
+if 'current_conversation_object' not in st.session_state:
     st.session_state.current_conversation_object = None
-# 'editing_turn_index' was in user's code, but not used in this version yet.
-# if 'editing_turn_index' not in st.session_state:
-#     st.session_state.editing_turn_index = None
 if 'conversation_run_results' not in st.session_state:
-    st.session_state.conversation_run_results = None # Dict of {turn_id: AIResponse}
-if 'save_conversation_name_input' not in st.session_state: # To hold text_input state for save
+    st.session_state.conversation_run_results = None
+if 'save_conversation_name_input' not in st.session_state:
     st.session_state.save_conversation_name_input = ""
+
+# Add any other session state keys that might need to be cleared on context switch,
+# ensuring they are initialized if they don't exist.
+# For example, if UI elements for delete confirmations use session state keys
+# that are dynamically generated (e.g., f"confirm_delete_tpl_{base_name}_v{version}"),
+# those are typically handled when the button is pressed and don't need global init here,
+# but should be cleared if a context switch makes them irrelevant.
+# The context switch logic itself will handle clearing item-specific states.
 
 
 # --- Main Application ---
@@ -266,6 +282,56 @@ st.session_state.menu_choice = st.sidebar.radio(
     index=navigation_options.index(st.session_state.menu_choice if st.session_state.menu_choice in navigation_options else "Dashboard")
 )
 menu_choice = st.session_state.menu_choice
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📍 Active Context")
+
+# Determine initial index for selectbox based on current session_state.active_context_id
+# This ensures the selectbox correctly reflects the active context on rerun.
+current_context_name_for_select = "My Personal Space" # Default fallback
+for name, c_id in AVAILABLE_CONTEXTS.items(): # AVAILABLE_CONTEXTS and CONTEXT_OPTIONS_NAMES are global
+    if c_id == st.session_state.active_context_id:
+        current_context_name_for_select = name
+        break
+
+try:
+    current_selectbox_index = CONTEXT_OPTIONS_NAMES.index(current_context_name_for_select)
+except ValueError:
+    # Fallback if current_context_name_for_select isn't in CONTEXT_OPTIONS_NAMES
+    # (should not happen with proper init)
+    current_selectbox_index = 0
+
+selected_context_name = st.sidebar.selectbox(
+    "Current Operational Context:",
+    options=CONTEXT_OPTIONS_NAMES,
+    index=current_selectbox_index, # Set default index
+    key="context_selector_widget", # Unique key for the widget
+    help="Switch between your personal space and shared workspaces. This affects where items are loaded from and saved to."
+)
+
+# Update session state if selection changes
+if AVAILABLE_CONTEXTS[selected_context_name] != st.session_state.active_context_id:
+    st.session_state.active_context_id = AVAILABLE_CONTEXTS[selected_context_name]
+
+    # Clear loaded items and UI states that are context-specific
+    st.session_state.current_prompt_object = None
+    st.session_state.current_conversation_object = None
+    st.session_state.last_ai_response_single = None
+    st.session_state.conversation_run_results = None
+    st.session_state.save_template_name_input = ""
+    st.session_state.save_conversation_name_input = ""
+
+    # Clear any dynamic confirmation flags for deletions, as they are context-specific
+    # This requires iterating through session_state keys and removing relevant ones.
+    keys_to_delete = [k for k in st.session_state.keys() if k.startswith("confirm_delete_tpl_") or k.startswith("confirm_delete_cnv_")]
+    for k in keys_to_delete:
+        del st.session_state[k]
+
+    st.toast(f"Context switched to: {selected_context_name}", icon="🔄")
+    st.experimental_rerun() # Rerun to reflect context change, especially in library views
+
+# Display the current context ID for user awareness/debugging
+st.sidebar.caption(f"Current Context ID: `{st.session_state.active_context_id}`")
 
 
 # --- Main Content Area ---
