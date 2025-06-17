@@ -8,20 +8,45 @@ from .prompt import PromptObject
 from .exceptions import TemplateCorruptedError
 
 class TemplateManager:
-    """Manages saving, loading, and listing of PromptObject templates."""
+    """
+    Manages saving, loading, listing, and deletion of PromptObject templates,
+    supporting context-specific storage paths (e.g., for users or workspaces).
+    """
 
-    def __init__(self, templates_dir: str = "prometheus_protocol/templates"):
+    def __init__(self, data_storage_base_path: str):
         """
         Initializes the TemplateManager.
 
         Args:
-            templates_dir (str, optional): The directory to store prompt templates.
-                                           Defaults to "prometheus_protocol/templates".
-                                           The directory will be created if it doesn't exist.
+            data_storage_base_path (str): The root directory for all application data.
+                                           Templates will be stored in a subdirectory under this path.
         """
-        self.templates_dir_path = Path(templates_dir)
-        self.templates_dir_path.mkdir(parents=True, exist_ok=True)
-        # print(f"TemplateManager initialized. Templates directory: {self.templates_dir_path.resolve()}") # For debugging, can be removed
+        self.data_storage_base_path = Path(data_storage_base_path)
+        self.templates_subdir = "templates" # Instance attribute
+        # Specific context paths are now determined per-method call or via a helper.
+
+    def _get_context_specific_templates_path(self, context_id: Optional[str] = None) -> Path:
+        """
+        Determines the templates directory path for a given context (user or workspace).
+        Creates the directory if it doesn't exist.
+
+        Args:
+            context_id (Optional[str]): The ID of the user (for personal space)
+                                        or workspace. If None, uses a default user ID.
+        Returns:
+            Path: The path to the context-specific templates directory.
+        """
+        effective_user_id_for_personal = "default_user_prompts"
+
+        context_path: Path
+        if context_id and context_id.startswith("ws_"): # Workspace context
+            context_path = self.data_storage_base_path / "workspaces" / context_id / self.templates_subdir
+        else: # Personal space context (either specific user_id or default)
+            user_id_to_use = context_id if context_id else effective_user_id_for_personal
+            context_path = self.data_storage_base_path / "user_personal_spaces" / user_id_to_use / self.templates_subdir
+
+        context_path.mkdir(parents=True, exist_ok=True)
+        return context_path
 
     def _sanitize_base_name(self, template_name: str) -> str:
         """
@@ -56,41 +81,37 @@ class TemplateManager:
         """Constructs a versioned filename."""
         return f"{base_name}_v{version}.json"
 
-    def _get_versions_for_base_name(self, base_name: str) -> List[int]:
+    def _get_versions_for_base_name(self, base_name: str, context_id: Optional[str] = None) -> List[int]:
         """
-        Scans the template directory for files matching base_name_v*.json
-        and returns a sorted list of found integer versions.
+        Scans the context-specific template directory for files matching
+        base_name_v*.json and returns a sorted list of found integer versions.
         """
+        target_dir = self._get_context_specific_templates_path(context_id)
         versions = []
-        if not self.templates_dir_path.exists(): # Should exist due to __init__
+        if not target_dir.exists():
             return []
 
-        # Regex to match base_name_v<digits>.json
-        # Example: my_prompt_v1.json, my_prompt_v12.json
-        # We need to escape base_name if it can contain regex special characters,
-        # but our sanitization should prevent this.
         pattern = re.compile(f"^{re.escape(base_name)}_v(\d+)\.json$")
 
-        for f_path in self.templates_dir_path.iterdir():
+        for f_path in target_dir.iterdir():
             if f_path.is_file():
                 match = pattern.match(f_path.name)
                 if match:
                     try:
                         versions.append(int(match.group(1)))
                     except ValueError:
-                        # Should not happen if regex is correct
-                        pass # Or log this anomaly
+                        pass
         return sorted(versions)
 
-    def _get_highest_version(self, base_name: str) -> int:
+    def _get_highest_version(self, base_name: str, context_id: Optional[str] = None) -> int:
         """
-        Gets the highest existing version number for a given base_name.
+        Gets the highest existing version number for a given base_name in a specific context.
         Returns 0 if no versions exist.
         """
-        versions = self._get_versions_for_base_name(base_name)
+        versions = self._get_versions_for_base_name(base_name, context_id=context_id)
         return versions[-1] if versions else 0
 
-    def save_template(self, prompt: PromptObject, template_name: str) -> PromptObject:
+    def save_template(self, prompt: PromptObject, template_name: str, context_id: Optional[str] = None) -> PromptObject:
         """
         Saves a PromptObject instance as a versioned JSON template file.
 
@@ -103,47 +124,41 @@ class TemplateManager:
 
         Args:
             prompt (PromptObject): The PromptObject instance to save.
-                                   Its 'version' and 'last_modified_at' attributes
-                                   will be updated by this method.
             template_name (str): The desired base name for the template.
+            context_id (Optional[str]): The context (user or workspace) for storage.
 
         Returns:
-            PromptObject: The updated PromptObject instance with new version and
-                          last_modified_at timestamp.
+            PromptObject: The updated PromptObject instance.
 
         Raises:
-            ValueError: If the template_name is empty, whitespace-only, or
-                        sanitizes to an empty string.
-            IOError: If there's an error writing the file to disk.
+            ValueError: If template_name is invalid.
+            IOError: If file writing fails.
         """
-        base_name = self._sanitize_base_name(template_name) # Raises ValueError if invalid
+        base_name = self._sanitize_base_name(template_name)
+        target_dir = self._get_context_specific_templates_path(context_id)
 
-        highest_existing_version = self._get_highest_version(base_name)
+        highest_existing_version = self._get_highest_version(base_name, context_id=context_id)
         new_version = highest_existing_version + 1
 
-        # Update the prompt object itself
         prompt.version = new_version
-        prompt.touch() # Updates last_modified_at
+        prompt.touch()
 
         file_name_str = self._construct_filename(base_name, new_version)
-        file_path = self.templates_dir_path / file_name_str
+        file_path = target_dir / file_name_str
 
-        prompt_data = prompt.to_dict() # Get data after updates
+        prompt_data = prompt.to_dict()
 
         try:
             with file_path.open('w', encoding='utf-8') as f:
                 json.dump(prompt_data, f, indent=4)
-            # print(f"Template '{base_name}' version {new_version} saved to {file_path}") # For debugging
         except IOError as e:
-            # Clean up: if file was partially created, should we attempt to delete it?
-            # For now, let the partial file exist if IOError occurs during write.
             raise IOError(
-                f"Could not save template '{base_name}' version {new_version} to {file_path}: {e}"
+                f"Could not save template '{base_name}' version {new_version} to {file_path} in context '{context_id}': {e}"
             ) from e
 
         return prompt
 
-    def load_template(self, template_name: str, version: Optional[int] = None) -> PromptObject:
+    def load_template(self, template_name: str, version: Optional[int] = None, context_id: Optional[str] = None) -> PromptObject:
         """
         Loads a PromptObject from a versioned JSON template file.
 
@@ -154,6 +169,7 @@ class TemplateManager:
             template_name (str): The base name of the template to load.
             version (Optional[int], optional): The specific version to load.
                                                Defaults to None (load latest).
+            context_id (Optional[str]): The context (user or workspace) for storage.
 
         Returns:
             PromptObject: The loaded PromptObject instance.
@@ -162,84 +178,70 @@ class TemplateManager:
             FileNotFoundError: If the template or specified version does not exist.
             TemplateCorruptedError: If the template file is not valid JSON or
                                     cannot be deserialized into a PromptObject.
-            ValueError: If the template_name is empty, whitespace-only, or
-                        sanitizes to an empty string.
+            ValueError: If template_name is invalid.
         """
-        base_name = self._sanitize_base_name(template_name) # Raises ValueError if invalid
+        base_name = self._sanitize_base_name(template_name)
+        target_dir = self._get_context_specific_templates_path(context_id)
 
         version_to_load: int
         if version is None:
-            highest_version = self._get_highest_version(base_name)
+            highest_version = self._get_highest_version(base_name, context_id=context_id)
             if highest_version == 0:
-                raise FileNotFoundError(f"No versions found for template '{base_name}'.")
+                raise FileNotFoundError(f"No versions found for template '{base_name}' in context '{context_id}'.")
             version_to_load = highest_version
         else:
-            # Check if this specific version exists by looking it up in available versions.
-            # This is more robust than just trying to construct filename and checking file.exists(),
-            # as _get_versions_for_base_name confirms the naming pattern.
-            available_versions = self._get_versions_for_base_name(base_name)
+            available_versions = self._get_versions_for_base_name(base_name, context_id=context_id)
             if version not in available_versions:
                 raise FileNotFoundError(
-                    f"Version {version} for template '{base_name}' not found. "
+                    f"Version {version} for template '{base_name}' not found in context '{context_id}'. "
                     f"Available versions: {available_versions if available_versions else 'None'}."
                 )
             version_to_load = version
 
         file_name_str = self._construct_filename(base_name, version_to_load)
-        file_path = self.templates_dir_path / file_name_str
+        file_path = target_dir / file_name_str
 
-        # This check is technically redundant if `version in available_versions` passed,
-        # but it's a good safeguard before file access.
         if not file_path.exists():
-            # This state should ideally not be reached if logic above is correct
             raise FileNotFoundError(
-                f"Template file '{file_name_str}' for '{base_name}' version {version_to_load} not found at {file_path}."
+                f"Template file '{file_name_str}' for '{base_name}' version {version_to_load} not found at {file_path} in context '{context_id}'."
             )
 
         try:
             with file_path.open('r', encoding='utf-8') as f:
                 data = json.load(f)
-
             prompt_object = PromptObject.from_dict(data)
             return prompt_object
         except json.JSONDecodeError as e:
-            # Ensure TemplateCorruptedError is imported (globally or locally as before)
-            from .exceptions import TemplateCorruptedError
             raise TemplateCorruptedError(
-                f"Template file {file_path} is corrupted (not valid JSON): {e}"
+                f"Template file {file_path} in context '{context_id}' is corrupted (not valid JSON): {e}"
             ) from e
         except Exception as e:
-            from .exceptions import TemplateCorruptedError
             raise TemplateCorruptedError(
-                f"Error deserializing template {file_path} "
+                f"Error deserializing template {file_path} in context '{context_id}' "
                 f"(e.g., mismatched data structure or other error in from_dict): {e}"
             ) from e
 
-    def list_templates(self) -> Dict[str, List[int]]:
+    def list_templates(self, context_id: Optional[str] = None) -> Dict[str, List[int]]:
         """
-        Lists available templates and their versions.
+        Lists available templates and their versions for a given context.
 
-        Scans the templates directory for versioned .json files (e.g., name_v1.json).
+        Args:
+            context_id (Optional[str]): The context (user or workspace) to list for.
 
         Returns:
             Dict[str, List[int]]: A dictionary where keys are base template names
                                    and values are sorted lists of available integer
-                                   versions for that template.
-                                   Example: {"my_prompt": [1, 2], "another": [1]}
+                                   versions for that template in the given context.
         """
+        target_dir = self._get_context_specific_templates_path(context_id)
         templates_with_versions: Dict[str, List[int]] = {}
 
-        if not self.templates_dir_path.exists() or            not self.templates_dir_path.is_dir():
-            return templates_with_versions # Return empty dict if dir doesn't exist
+        if not target_dir.exists() or not target_dir.is_dir():
+            return templates_with_versions
 
-        # Regex to match <base_name>_v<digits>.json and capture base_name and version
-        # Example: my_prompt_v1.json -> base_name="my_prompt", version="1"
-        # The base_name can contain underscores but not end with _v<digits> itself.
-        # This regex assumes base_name does not contain '_v' followed by digits at the end.
-        # Our _sanitize_base_name should ensure this.
         pattern = re.compile(r"^(.*?)_v(\d+)\.json$")
 
-        for f_path in self.templates_dir_path.iterdir():
+        for f_path in target_dir.iterdir():
             if f_path.is_file():
                 match = pattern.match(f_path.name)
                 if match:
@@ -250,74 +252,68 @@ class TemplateManager:
                             templates_with_versions[base_name] = []
                         templates_with_versions[base_name].append(version)
                     except ValueError:
-                        # Should not happen if regex is correct and version is digits
-                        pass # Or log this anomaly
+                        pass
 
-        # Sort versions for each template
         for base_name in templates_with_versions:
             templates_with_versions[base_name].sort()
 
         return templates_with_versions
 
-    def delete_template_version(self, template_name: str, version: int) -> bool:
+    def delete_template_version(self, template_name: str, version: int, context_id: Optional[str] = None) -> bool:
         """
-        Deletes a specific version of a prompt template.
+        Deletes a specific version of a prompt template from a given context.
 
         Args:
             template_name (str): The base name of the template.
             version (int): The specific version to delete.
+            context_id (Optional[str]): The context (user or workspace).
 
         Returns:
-            bool: True if the version was successfully deleted, False otherwise
-                  (e.g., if the file didn't exist or an IOError occurred).
+            bool: True if the version was successfully deleted, False otherwise.
         """
-        base_name = self._sanitize_base_name(template_name) # Can raise ValueError
+        base_name = self._sanitize_base_name(template_name)
+        target_dir = self._get_context_specific_templates_path(context_id)
 
         file_name_str = self._construct_filename(base_name, version)
-        file_path = self.templates_dir_path / file_name_str
+        file_path = target_dir / file_name_str
 
         if file_path.exists() and file_path.is_file():
             try:
                 file_path.unlink()
-                # print(f"Deleted template version: {file_path}") # For debugging
                 return True
             except IOError as e:
-                # Log this error in a real application
-                print(f"IOError deleting template version {file_path}: {e}")
+                print(f"IOError deleting template version {file_path} in context '{context_id}': {e}")
                 return False
         else:
-            # print(f"Template version not found for deletion: {file_path}") # For debugging
             return False
 
-    def delete_template_all_versions(self, template_name: str) -> int:
+    def delete_template_all_versions(self, template_name: str, context_id: Optional[str] = None) -> int:
         """
-        Deletes all versions of a given prompt template.
+        Deletes all versions of a given prompt template from a specific context.
 
         Args:
-            template_name (str): The base name of the template to delete all versions of.
+            template_name (str): The base name of the template.
+            context_id (Optional[str]): The context (user or workspace).
 
         Returns:
             int: The number of versions successfully deleted.
         """
-        base_name = self._sanitize_base_name(template_name) # Can raise ValueError
+        base_name = self._sanitize_base_name(template_name)
+        target_dir = self._get_context_specific_templates_path(context_id)
 
-        versions_to_delete = self._get_versions_for_base_name(base_name)
+        versions_to_delete = self._get_versions_for_base_name(base_name, context_id=context_id)
         if not versions_to_delete:
-            # print(f"No versions found for template '{base_name}' to delete.") # For debugging
             return 0
 
         deleted_count = 0
         for v_num in versions_to_delete:
             file_name_str = self._construct_filename(base_name, v_num)
-            file_path = self.templates_dir_path / file_name_str
-            if file_path.exists() and file_path.is_file(): # Double check
+            file_path = target_dir / file_name_str
+            if file_path.exists() and file_path.is_file():
                 try:
                     file_path.unlink()
-                    # print(f"Deleted template version: {file_path}") # For debugging
                     deleted_count += 1
                 except IOError as e:
-                    # Log this error in a real application
-                    print(f"IOError deleting template version {file_path} during delete_all: {e}")
-                    # Continue to try deleting other versions
+                    print(f"IOError deleting template version {file_path} in context '{context_id}' during delete_all: {e}")
 
         return deleted_count

@@ -11,20 +11,39 @@ from prometheus_protocol.core.exceptions import ConversationCorruptedError
 
 
 class ConversationManager:
-    """Manages saving, loading, and listing of Conversation instances."""
+    """
+    Manages saving, loading, listing, and deletion of Conversation instances,
+    supporting context-specific storage paths (e.g., for users or workspaces).
+    """
 
-    def __init__(self, conversations_dir: str = "prometheus_protocol/conversations"):
+    def __init__(self, data_storage_base_path: str):
         """
         Initializes the ConversationManager.
 
         Args:
-            conversations_dir (str, optional): The directory to store conversation files.
-                                             Defaults to "prometheus_protocol/conversations".
-                                             The directory will be created if it doesn't exist.
+            data_storage_base_path (str): The root directory for all application data.
+                                           Conversations will be stored in a subdirectory.
         """
-        self.conversations_dir_path = Path(conversations_dir)
-        self.conversations_dir_path.mkdir(parents=True, exist_ok=True)
-        # print(f"ConversationManager initialized. Conversations directory: {self.conversations_dir_path.resolve()}") # For debugging
+        self.data_storage_base_path = Path(data_storage_base_path)
+        self.conversations_subdir = "conversations" # Instance attribute
+        # Specific context paths are determined per-method call.
+
+    def _get_context_specific_conversations_path(self, context_id: Optional[str] = None) -> Path:
+        """
+        Determines the conversations directory path for a given context.
+        Creates the directory if it doesn't exist.
+        """
+        effective_user_id_for_personal = "default_user_conversations" # Fallback
+
+        context_path: Path
+        if context_id and context_id.startswith("ws_"): # Workspace context
+            context_path = self.data_storage_base_path / "workspaces" / context_id / self.conversations_subdir
+        else: # Personal space context
+            user_id_to_use = context_id if context_id else effective_user_id_for_personal
+            context_path = self.data_storage_base_path / "user_personal_spaces" / user_id_to_use / self.conversations_subdir
+
+        context_path.mkdir(parents=True, exist_ok=True)
+        return context_path
 
     def _sanitize_base_name(self, conversation_name: str) -> str:
         """
@@ -58,18 +77,19 @@ class ConversationManager:
         """Constructs a versioned filename for a conversation."""
         return f"{base_name}_v{version}.json" # Consistent with TemplateManager
 
-    def _get_versions_for_base_name(self, base_name: str) -> List[int]:
+    def _get_versions_for_base_name(self, base_name: str, context_id: Optional[str] = None) -> List[int]:
         """
-        Scans the conversations directory for files matching base_name_v*.json
-        and returns a sorted list of found integer versions.
+        Scans the context-specific conversations directory for files matching
+        base_name_v*.json and returns a sorted list of found integer versions.
         """
+        target_dir = self._get_context_specific_conversations_path(context_id)
         versions = []
-        if not self.conversations_dir_path.exists():
+        if not target_dir.exists():
             return []
 
         pattern = re.compile(f"^{re.escape(base_name)}_v(\d+)\.json$")
 
-        for f_path in self.conversations_dir_path.iterdir():
+        for f_path in target_dir.iterdir():
             if f_path.is_file():
                 match = pattern.match(f_path.name)
                 if match:
@@ -79,15 +99,15 @@ class ConversationManager:
                         pass
         return sorted(versions)
 
-    def _get_highest_version(self, base_name: str) -> int:
+    def _get_highest_version(self, base_name: str, context_id: Optional[str] = None) -> int:
         """
-        Gets the highest existing version number for a given base_name.
+        Gets the highest existing version number for a given base_name in a specific context.
         Returns 0 if no versions exist.
         """
-        versions = self._get_versions_for_base_name(base_name)
+        versions = self._get_versions_for_base_name(base_name, context_id=context_id)
         return versions[-1] if versions else 0
 
-    def save_conversation(self, conversation: Conversation, conversation_name: str) -> Conversation:
+    def save_conversation(self, conversation: Conversation, conversation_name: str, context_id: Optional[str] = None) -> Conversation:
         """
         Saves a Conversation instance as a versioned JSON file.
         Assigns a new version number (incremented from the highest existing).
@@ -96,23 +116,25 @@ class ConversationManager:
         Args:
             conversation (Conversation): The Conversation instance to save.
             conversation_name (str): The base name for the conversation.
+            context_id (Optional[str]): The context (user or workspace) for storage.
 
         Returns:
             Conversation: The updated Conversation instance.
         """
-        if not isinstance(conversation, Conversation): # Keep existing type check
+        if not isinstance(conversation, Conversation):
             raise TypeError("Input 'conversation' must be an instance of Conversation.")
 
         base_name = self._sanitize_base_name(conversation_name)
+        target_dir = self._get_context_specific_conversations_path(context_id)
 
-        highest_existing_version = self._get_highest_version(base_name)
+        highest_existing_version = self._get_highest_version(base_name, context_id=context_id)
         new_version = highest_existing_version + 1
 
-        conversation.version = new_version # Set version on the object
-        conversation.touch() # Updates last_modified_at
+        conversation.version = new_version
+        conversation.touch()
 
         file_name_str = self._construct_filename(base_name, new_version)
-        file_path = self.conversations_dir_path / file_name_str
+        file_path = target_dir / file_name_str
 
         conversation_data = conversation.to_dict()
 
@@ -121,12 +143,12 @@ class ConversationManager:
                 json.dump(conversation_data, f, indent=4)
         except IOError as e:
             raise IOError(
-                f"Could not save conversation '{base_name}' version {new_version} to {file_path}: {e}"
+                f"Could not save conversation '{base_name}' version {new_version} to {file_path} in context '{context_id}': {e}"
             ) from e
 
         return conversation
 
-    def load_conversation(self, conversation_name: str, version: Optional[int] = None) -> Conversation:
+    def load_conversation(self, conversation_name: str, version: Optional[int] = None, context_id: Optional[str] = None) -> Conversation:
         """
         Loads a Conversation from a versioned JSON file.
         Loads latest version if 'version' is None.
@@ -134,6 +156,7 @@ class ConversationManager:
         Args:
             conversation_name (str): Base name of the conversation.
             version (Optional[int]): Specific version to load. Defaults to latest.
+            context_id (Optional[str]): The context (user or workspace) for storage.
 
         Returns:
             Conversation: The loaded Conversation instance.
@@ -142,65 +165,62 @@ class ConversationManager:
             FileNotFoundError, ConversationCorruptedError, ValueError.
         """
         base_name = self._sanitize_base_name(conversation_name)
+        target_dir = self._get_context_specific_conversations_path(context_id)
 
         version_to_load: int
         if version is None:
-            highest_version = self._get_highest_version(base_name)
+            highest_version = self._get_highest_version(base_name, context_id=context_id)
             if highest_version == 0:
-                raise FileNotFoundError(f"No versions found for conversation '{base_name}'.")
+                raise FileNotFoundError(f"No versions found for conversation '{base_name}' in context '{context_id}'.")
             version_to_load = highest_version
         else:
-            available_versions = self._get_versions_for_base_name(base_name)
+            available_versions = self._get_versions_for_base_name(base_name, context_id=context_id)
             if version not in available_versions:
                 raise FileNotFoundError(
-                    f"Version {version} for conversation '{base_name}' not found. "
+                    f"Version {version} for conversation '{base_name}' not found in context '{context_id}'. "
                     f"Available versions: {available_versions if available_versions else 'None'}."
                 )
             version_to_load = version
 
         file_name_str = self._construct_filename(base_name, version_to_load)
-        file_path = self.conversations_dir_path / file_name_str
+        file_path = target_dir / file_name_str
 
-        if not file_path.exists(): # Safeguard, should be caught by version checks
-            raise FileNotFoundError(f"Conversation file '{file_name_str}' not found at {file_path}.")
+        if not file_path.exists():
+            raise FileNotFoundError(f"Conversation file '{file_name_str}' not found at {file_path} in context '{context_id}'.")
 
         try:
             with file_path.open('r', encoding='utf-8') as f:
                 data = json.load(f)
             conv_object = Conversation.from_dict(data)
-            # Sanity check for version consistency between filename and content (optional but good)
             if conv_object.version != version_to_load:
-                 # This could be a specific type of ConversationCorruptedError
-                 print(f"Warning: Version mismatch for {base_name}. File parsed as v{conv_object.version}, expected v{version_to_load}.")
-                 # For strictness, one might raise an error here. For now, let's assume file content is king for version.
-                 # Or, better, trust the filename's version and ensure from_dict sets it if it's in data.
-                 # The current Conversation.from_dict uses data.get('version', 1).
-                 # If the loaded data's version is different, it's an inconsistency.
-                 # The object returned will have the version from the file's content.
+                 print(f"Warning: Version mismatch for {base_name} in context '{context_id}'. File parsed as v{conv_object.version}, expected v{version_to_load}.")
             return conv_object
         except json.JSONDecodeError as e:
-            raise ConversationCorruptedError(f"Corrupted conversation file (invalid JSON) for '{base_name}' v{version_to_load}: {e}") from e
+            raise ConversationCorruptedError(f"Corrupted conversation file (invalid JSON) for '{base_name}' v{version_to_load} in context '{context_id}': {e}") from e
         except ValueError as e:
-            raise ConversationCorruptedError(f"Invalid data structure in conversation file for '{base_name}' v{version_to_load}: {e}") from e
+            raise ConversationCorruptedError(f"Invalid data structure in conversation file for '{base_name}' v{version_to_load} in context '{context_id}': {e}") from e
         except Exception as e:
-            raise ConversationCorruptedError(f"Unexpected error loading conversation '{base_name}' v{version_to_load}: {e}") from e
+            raise ConversationCorruptedError(f"Unexpected error loading conversation '{base_name}' v{version_to_load} in context '{context_id}': {e}") from e
 
-    def list_conversations(self) -> Dict[str, List[int]]:
+    def list_conversations(self, context_id: Optional[str] = None) -> Dict[str, List[int]]:
         """
-        Lists available conversations and their versions.
+        Lists available conversations and their versions for a given context.
+
+        Args:
+            context_id (Optional[str]): The context (user or workspace) to list for.
 
         Returns:
             Dict[str, List[int]]: Dict mapping base names to sorted lists of versions.
-                                   Example: {"my_chat": [1, 2], "project_alpha": [1]}
         """
+        target_dir = self._get_context_specific_conversations_path(context_id)
         conversations_with_versions: Dict[str, List[int]] = {}
 
-        if not self.conversations_dir_path.exists() or            not self.conversations_dir_path.is_dir():
+        if not target_dir.exists() or not target_dir.is_dir():
             return conversations_with_versions
 
         pattern = re.compile(r"^(.*?)_v(\d+)\.json$")
 
-        for f_path in self.conversations_dir_path.iterdir():
+        for f_path in target_dir.iterdir():
             if f_path.is_file():
                 match = pattern.match(f_path.name)
                 if match:
@@ -209,7 +229,7 @@ class ConversationManager:
                         version = int(match.group(2))
                         if base_name not in conversations_with_versions:
                             conversations_with_versions[base_name] = []
-                        if version not in conversations_with_versions[base_name]: # Ensure unique versions
+                        if version not in conversations_with_versions[base_name]:
                              conversations_with_versions[base_name].append(version)
                     except ValueError:
                         pass
@@ -219,65 +239,61 @@ class ConversationManager:
 
         return conversations_with_versions
 
-    def delete_conversation_version(self, conversation_name: str, version: int) -> bool:
+    def delete_conversation_version(self, conversation_name: str, version: int, context_id: Optional[str] = None) -> bool:
         """
-        Deletes a specific version of a conversation.
+        Deletes a specific version of a conversation from a given context.
 
         Args:
             conversation_name (str): The base name of the conversation.
             version (int): The specific version to delete.
+            context_id (Optional[str]): The context (user or workspace).
 
         Returns:
-            bool: True if the version was successfully deleted, False otherwise
-                  (e.g., if the file didn't exist or an IOError occurred).
+            bool: True if the version was successfully deleted, False otherwise.
         """
-        base_name = self._sanitize_base_name(conversation_name) # Can raise ValueError
+        base_name = self._sanitize_base_name(conversation_name)
+        target_dir = self._get_context_specific_conversations_path(context_id)
 
         file_name_str = self._construct_filename(base_name, version)
-        file_path = self.conversations_dir_path / file_name_str
+        file_path = target_dir / file_name_str
 
         if file_path.exists() and file_path.is_file():
             try:
                 file_path.unlink()
-                # print(f"Deleted conversation version: {file_path}") # For debugging
                 return True
             except IOError as e:
-                # Log this error in a real application
-                print(f"IOError deleting conversation version {file_path}: {e}")
+                print(f"IOError deleting conversation version {file_path} in context '{context_id}': {e}")
                 return False
         else:
-            # print(f"Conversation version not found for deletion: {file_path}") # For debugging
             return False
 
-    def delete_conversation_all_versions(self, conversation_name: str) -> int:
+    def delete_conversation_all_versions(self, conversation_name: str, context_id: Optional[str] = None) -> int:
         """
-        Deletes all versions of a given conversation.
+        Deletes all versions of a given conversation from a specific context.
 
         Args:
-            conversation_name (str): The base name of the conversation to delete all versions of.
+            conversation_name (str): The base name of the conversation.
+            context_id (Optional[str]): The context (user or workspace).
 
         Returns:
             int: The number of versions successfully deleted.
         """
-        base_name = self._sanitize_base_name(conversation_name) # Can raise ValueError
+        base_name = self._sanitize_base_name(conversation_name)
+        target_dir = self._get_context_specific_conversations_path(context_id)
 
-        versions_to_delete = self._get_versions_for_base_name(base_name)
+        versions_to_delete = self._get_versions_for_base_name(base_name, context_id=context_id)
         if not versions_to_delete:
-            # print(f"No versions found for conversation '{base_name}' to delete.") # For debugging
             return 0
 
         deleted_count = 0
         for v_num in versions_to_delete:
             file_name_str = self._construct_filename(base_name, v_num)
-            file_path = self.conversations_dir_path / file_name_str
-            if file_path.exists() and file_path.is_file(): # Double check
+            file_path = target_dir / file_name_str
+            if file_path.exists() and file_path.is_file():
                 try:
                     file_path.unlink()
-                    # print(f"Deleted conversation version: {file_path}") # For debugging
                     deleted_count += 1
                 except IOError as e:
-                    # Log this error in a real application
-                    print(f"IOError deleting conversation version {file_path} during delete_all: {e}")
-                    # Continue to try deleting other versions
+                    print(f"IOError deleting conversation version {file_path} in context '{context_id}' during delete_all: {e}")
 
         return deleted_count

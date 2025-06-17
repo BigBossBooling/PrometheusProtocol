@@ -172,15 +172,16 @@ The `JulesExecutor` class is conceptually responsible for all direct interaction
     *   Parsing Jules API responses into `AIResponse` objects.
     *   Basic error handling for API interactions.
 *   **Initialization (`__init__`)**:
-    *   Takes an API key and endpoint URL. The `api_key` parameter could default to a value retrieved from `UserSettings.default_jules_api_key` for the current user. The `endpoint_url` would be a system configuration.
+    *   Ideally, `JulesExecutor` would be initialized with an `AppConfig` object (see `centralized_configuration.md`). From `AppConfig`, it would source its base `endpoint_url`, a system-level `api_key` (if any), and its own system-level default execution settings (e.g., for temperature, max_tokens).
+    *   The `api_key` used for a request would then follow a hierarchy: `UserSettings.default_jules_api_key` (if present and executor's is placeholder/system's is None) > `AppConfig.jules_system_api_key` > executor's built-in placeholder.
 *   **Payload Preparation (`_prepare_jules_request_payload`)**:
     *   This private helper method constructs the JSON payload for the Jules API.
     *   It maps fields from `PromptObject` (role, task, context, constraints, examples) to the API's expected structure.
     *   **Settings Hierarchy:** The execution settings (like temperature, max_tokens) sent to Jules are determined by a clear hierarchy:
         1.  Specific settings in `PromptObject.settings` take highest precedence.
         2.  If a setting is not in `PromptObject.settings` or is `None`, the system looks to `UserSettings.default_execution_settings`.
-        3.  If not found there, it falls back to hardcoded defaults within the `JulesExecutor` itself.
-    *   It also incorporates conversation history if provided.
+        3.  If not found there, it falls back to system-level defaults sourced from `AppConfig` (e.g., `app_config.jules_default_execution_settings`).
+    *   It also incorporates conversation history if provided and user preferences from `UserSettings`.
 *   **Execution Methods (`execute_prompt`, `execute_conversation_turn`)**:
     *   These methods orchestrate the call to `_prepare_jules_request_payload` and then (conceptually) make the API call.
     *   In the V1 stub implementation, they return dynamically simulated `AIResponse` objects, capable of mimicking success or various error conditions based on the input prompt's content.

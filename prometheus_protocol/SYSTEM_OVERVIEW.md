@@ -156,54 +156,56 @@ This section describes the main classes, functions, and conceptual components th
     *   **Produces:** `List[PotentialRisk]`.
 
 *   **`TemplateManager`** ([`core/template_manager.py`](./core/template_manager.py))
-    *   **Responsibility:** Manages the persistence (saving, loading, listing) of `PromptObject` instances as versioned templates on the file system.
+    *   **Responsibility:** Manages the persistence (saving, loading, listing, and deletion) of `PromptObject` instances as versioned templates.
+    *   **`__init__(self, data_storage_base_path: str)`:** Accepts a base path for all application data storage.
     *   **Key Methods:**
-        *   `save_template(prompt: PromptObject, template_name: str) -> PromptObject`: Saves a prompt, assigning/incrementing its version.
-        *   `load_template(template_name: str, version: Optional[int] = None) -> PromptObject`: Loads the latest or a specific version of a prompt template.
-        *   `list_templates() -> Dict[str, List[int]]`: Lists all template base names and their available versions.
-        *   `delete_template_version(template_name: str, version: int) -> bool`: Deletes a specific version of a template. Returns `True` on success.
-        *   `delete_template_all_versions(template_name: str) -> int`: Deletes all versions of a template. Returns count of deleted versions.
-    *   **Core Functionality:** Handles filename sanitization, version number management, JSON serialization/deserialization, and deletion of `PromptObject` template files.
-    *   **Operates On:** `PromptObject`, file system (within its configured `templates_dir_path`).
+        *   `save_template(prompt: PromptObject, template_name: str, context_id: Optional[str] = None) -> PromptObject`: Saves a prompt, assigning/incrementing its version, within the specified context.
+        *   `load_template(template_name: str, version: Optional[int] = None, context_id: Optional[str] = None) -> PromptObject`: Loads the latest or a specific version of a prompt template from the specified context.
+        *   `list_templates(context_id: Optional[str] = None) -> Dict[str, List[int]]`: Lists all template base names and their available versions within the specified context.
+        *   `delete_template_version(template_name: str, version: int, context_id: Optional[str] = None) -> bool`: Deletes a specific version of a template from the specified context. Returns `True` on success.
+        *   `delete_template_all_versions(template_name: str, context_id: Optional[str] = None) -> int`: Deletes all versions of a template from the specified context. Returns count of deleted versions.
+    *   **Core Functionality:** Handles filename sanitization, version number management, JSON serialization/deserialization, and deletion of `PromptObject` template files. Operates on context-specific subdirectories (e.g., for personal user spaces or shared workspaces) based on the provided `context_id`, constructing paths like `data_storage_base_path/user_personal_spaces/[user_id]/templates/` or `data_storage_base_path/workspaces/[ws_id]/templates/`.
+    *   **Operates On:** `data_storage_base_path` (from init), `PromptObject`, file system, `context_id`.
     *   **Produces/Consumes:** `PromptObject` instances, JSON files.
 
 *   **`ConversationManager`** ([`core/conversation_manager.py`](./core/conversation_manager.py))
-    *   **Responsibility:** Manages the persistence (saving, loading, listing) of `Conversation` objects as versioned files on the file system.
+    *   **Responsibility:** Manages the persistence (saving, loading, listing, and deletion) of `Conversation` objects as versioned files.
+    *   **`__init__(self, data_storage_base_path: str)`:** Accepts a base path for all application data storage.
     *   **Key Methods:**
-        *   `save_conversation(conversation: Conversation, conversation_name: str) -> Conversation`: Saves a conversation, assigning/incrementing its version number and updating `last_modified_at`. Returns the updated `Conversation`.
-        *   `load_conversation(conversation_name: str, version: Optional[int] = None) -> Conversation`: Loads the latest or a specific version of a conversation.
-        *   `list_conversations() -> Dict[str, List[int]]`: Lists all conversation base names and their available sorted versions.
-        *   `delete_conversation_version(conversation_name: str, version: int) -> bool`: Deletes a specific version of a conversation. Returns `True` on success.
-        *   `delete_conversation_all_versions(conversation_name: str) -> int`: Deletes all versions of a conversation. Returns count of deleted versions.
-    *   **Core Functionality:** Handles filename sanitization, version number management, JSON serialization/deserialization, and deletion of `Conversation` files.
-    *   **Operates On:** `Conversation`, file system (within its configured `conversations_dir_path`).
+        *   `save_conversation(conversation: Conversation, conversation_name: str, context_id: Optional[str] = None) -> Conversation`: Saves a conversation, assigning/incrementing its version number and updating `last_modified_at`, within the specified context. Returns the updated `Conversation`.
+        *   `load_conversation(conversation_name: str, version: Optional[int] = None, context_id: Optional[str] = None) -> Conversation`: Loads the latest or a specific version of a conversation from the specified context.
+        *   `list_conversations(context_id: Optional[str] = None) -> Dict[str, List[int]]`: Lists all conversation base names and their available sorted versions within the specified context.
+        *   `delete_conversation_version(conversation_name: str, version: int, context_id: Optional[str] = None) -> bool`: Deletes a specific version of a conversation from the specified context. Returns `True` on success.
+        *   `delete_conversation_all_versions(conversation_name: str, context_id: Optional[str] = None) -> int`: Deletes all versions of a conversation from the specified context. Returns count of deleted versions.
+    *   **Core Functionality:** Handles filename sanitization, version number management, JSON serialization/deserialization, and deletion of `Conversation` files. Operates on context-specific subdirectories (e.g., for personal user spaces or shared workspaces) based on the provided `context_id`, constructing paths like `data_storage_base_path/user_personal_spaces/[user_id]/conversations/` or `data_storage_base_path/workspaces/[ws_id]/conversations/`.
+    *   **Operates On:** `data_storage_base_path` (from init), `Conversation`, file system, `context_id`.
     *   **Produces/Consumes:** `Conversation` instances, JSON files.
 
 *   **`JulesExecutor` (Conceptual Stub)** ([`core/jules_executor.py`](./core/jules_executor.py))
-    *   **Responsibility:** (Conceptually) Manages all direct interaction with the hypothetical "Google Jules" AI engine. This includes formatting requests, "making API calls," and parsing responses.
+    *   **Responsibility:** (Conceptually) Manages all direct interaction with the hypothetical "Google Jules" AI engine. Its `__init__` would accept an `AppConfig` instance to source its base system defaults (API endpoint, system API key, default execution parameters).
     *   **Key Methods (Conceptual Stubs):**
         *   `_prepare_jules_request_payload(prompt: PromptObject, user_settings: Optional[UserSettings] = None, history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]`: Formats data for the Jules API.
         *   `execute_prompt(prompt: PromptObject, user_settings: Optional[UserSettings] = None) -> AIResponse`: "Executes" a single prompt.
         *   `execute_conversation_turn(turn: PromptTurn, current_conversation_history: List[Dict[str, str]], user_settings: Optional[UserSettings] = None) -> AIResponse`: "Executes" a single turn of a conversation.
-    *   **Core Functionality (Simulated):** Prepares request dictionaries. It establishes a settings hierarchy for execution parameters: `PromptObject.settings` override `UserSettings.default_execution_settings`, which in turn override hardcoded executor defaults. It also uses `UserSettings.default_jules_api_key` (if executor's initial key is a placeholder) and `UserSettings.preferred_output_language`. Returns dynamic, simulated `AIResponse` objects.
-    *   **Operates On:** `PromptObject`, `UserSettings`, `PromptTurn`, `List[Dict[str,str]]` (for history).
+    *   **Core Functionality (Simulated):** Prepares request dictionaries. It establishes a settings hierarchy for execution parameters: `PromptObject.settings` override `UserSettings.default_execution_settings`, which in turn override system-level defaults sourced from `AppConfig`. It also uses `UserSettings.default_jules_api_key` (if executor's initial key is a placeholder or the system key from `AppConfig` is `None`) and `UserSettings.preferred_output_language`. Returns dynamic, simulated `AIResponse` objects.
+    *   **Operates On:** `AppConfig`, `PromptObject`, `UserSettings`, `PromptTurn`, `List[Dict[str,str]]` (for history).
     *   **Produces:** `AIResponse` (simulated).
 
 *   **`ConversationOrchestrator`** ([`core/conversation_orchestrator.py`](./core/conversation_orchestrator.py))
     *   **Responsibility:** Manages the sequential execution of a `Conversation` object, orchestrating turn-by-turn interaction with the `JulesExecutor`.
-    *   **Constructor:** `__init__(self, jules_executor: JulesExecutor, user_settings: Optional[UserSettings] = None)` stores both dependencies.
+    *   **Constructor:** `__init__(self, jules_executor: JulesExecutor, user_settings: Optional[UserSettings] = None)` stores both dependencies. (Note: `user_settings` might be sourced from `AppConfig` by the main application and then passed here, or this class could also take `AppConfig` if it needs other system settings directly).
     *   **Key Method:** `run_full_conversation(conversation: Conversation) -> Dict[str, AIResponse]`
     *   **Core Functionality:** Iterates through `PromptTurn`s in a `Conversation`. Passes the stored `UserSettings` object to `JulesExecutor` when executing each turn. Manages the `conversation_history` list passed between turns, populates `AIResponse.source_conversation_id`, and collects all `AIResponse` objects. For V1, halts execution on the first turn that results in an error.
-    *   **Operates On:** `Conversation`, `JulesExecutor`, `UserSettings`.
+    *   **Operates On:** `AppConfig` (implicitly via `JulesExecutor` and potentially `UserSettings` if sourced from `AppConfig`), `Conversation`, `JulesExecutor`, `UserSettings`.
     *   **Produces:** `Dict[str, AIResponse]` (mapping turn IDs to their responses).
 
 *   **`UserSettingsManager`** ([`core/user_settings_manager.py`](./core/user_settings_manager.py))
-    *   **Responsibility:** Manages the persistence (saving and loading) of `UserSettings` objects to the file system. Each user's settings are stored in a dedicated JSON file.
+    *   **Responsibility:** Manages the persistence (saving and loading) of `UserSettings` objects. Its `__init__` would accept an `AppConfig` instance to determine the base storage path (e.g., from `app_config.data_storage_base_path / app_config.user_settings_subdir`).
     *   **Key Methods:**
         *   `save_settings(settings: UserSettings) -> UserSettings`: Saves a user's settings, updates `last_updated_at`, and returns the updated object.
         *   `load_settings(user_id: str) -> Optional[UserSettings]`: Loads a user's settings; returns `None` if not found.
-    *   **Core Functionality:** Handles user-specific file path generation, JSON serialization/deserialization of `UserSettings` objects, and error handling for corrupted settings files (raises `UserSettingsCorruptedError`).
-    *   **Operates On:** `UserSettings`, file system (within its configured `settings_base_dir_path`).
+    *   **Core Functionality:** Handles user-specific file path generation (based on its configured base path), JSON serialization/deserialization of `UserSettings` objects, and error handling.
+    *   **Operates On:** `AppConfig`, `UserSettings`, file system.
     *   **Produces/Consumes:** `UserSettings` instances, JSON files.
 
 ---
@@ -229,6 +231,12 @@ This section provides a summary of and links to detailed documents that explore 
 
 *   **Collaboration Features (V1) Concepts** ([`concepts/collaboration_features.md`](./concepts/collaboration_features.md))
     *   **Purpose:** Outlines V1 concepts for enabling multiple users to collaborate on `PromptObject` templates and `Conversation` objects. Defines shared workspaces, basic user roles/permissions, sharing mechanisms, impact on resource managers, and handling of asynchronous concurrent edits via versioning.
+
+*   **Prompt Pre-analysis Module Concepts** ([`concepts/prompt_preanalysis_module.md`](./concepts/prompt_preanalysis_module.md))
+    *   **Purpose:** Outlines concepts for a module that provides users with proactive, automated feedback on their `PromptObject`s *before* execution, focusing on aspects like readability, constraint specificity, and estimated token counts. This complements GIGO Guardrail and Risk Identifier feedback.
+
+*   **System State & Context Management Concepts** ([`concepts/system_context_management.md`](./concepts/system_context_management.md))
+    *   **Purpose:** Outlines conceptual approaches for managing system state and user context (e.g., current user, active workspace, item being edited) across the application, particularly for UI cohesion and context-aware backend operations.
 
 ---
 
@@ -304,11 +312,33 @@ This section serves as a "refinement backlog," capturing potential areas for imp
     *   **Status: V2+ Major Feature Area / Future Conceptualization**
     *   **Summary:** While the `UserSettings` dataclass and `UserSettingsManager` provide basic persistence for user preferences, a full User Account Management system (registration, login, profiles) and a comprehensive UI for managing all global user settings (including secure API key management beyond local files) are significant V2+ undertakings.
 
+6.  **Implement "Prompt Pre-analysis Module" (beyond V1 conceptualization):**
+    *   **Status:** V1 Concepts Defined
+    *   **Summary:** The foundational concepts for a "Prompt Pre-analysis Module" – including initial checks like readability, constraint actionability, token estimation, the `PreanalysisFinding` data structure, and basic UI integration ideas – have been documented in [`concepts/prompt_preanalysis_module.md`](./concepts/prompt_preanalysis_module.md).
+    *   **Next Steps (Future Work):** Detailed design of heuristic algorithms for each specific pre-analysis check, implementation of the module's core logic in Python (e.g., a new class or functions), full integration into the `PromptObject` editor UI based on the concepts, and addition of relevant unit tests for the analysis functions.
+
+7.  **Implement and Integrate "System State & Context Management" (beyond V1 conceptualization):**
+    *   **Status:** **Partially Implemented (Backend Managers Refactored for Context; V1 UI Uses Default Context)**
+    *   **Summary:** Foundational concepts for system state/context are in [`concepts/system_context_management.md`](./concepts/system_context_management.md). Key backend managers (`TemplateManager`, `ConversationManager`) have been refactored: their `__init__` methods now accept a `data_storage_base_path`, and their public methods (save, load, list, delete) accept a `context_id: Optional[str]` parameter. This enables them to operate on context-specific file paths (e.g., for different users' personal spaces or shared workspaces like `base_path/user_personal_spaces/[user_id]/[asset_type]/` or `base_path/workspaces/[ws_id]/[asset_type]/`). The `streamlit_app.py` prototype has been updated to initialize these managers with a common base data path and to call their methods using a default user context (`DEFAULT_USER_ID_FOR_STREAMLIT` for `active_context_id`), thus preparing the backend for multi-context support even though the V1 UI doesn't yet allow context switching.
+    *   **Next Steps (Future Work):**
+        *   Implement full UI for workspace selection and context switching in `streamlit_app.py` to dynamically change `st.session_state.active_context_id`.
+        *   Implement robust "dirty" state management in `streamlit_app.py` to handle unsaved changes when context shifts.
+        *   Further explore advanced state management solutions if/when moving beyond Streamlit or requiring more complex state synchronization for V2+ real-time collaboration.
+        *   Full integration with a User Account Management system for actual user IDs and workspace memberships to be used as `context_id`.
+
 ### C. Terminology & Consistency
 
 1.  **"Template Name" vs. "Base Name":**
     *   **Status: Acknowledged; For Future Code-Level Review.**
     *   **Summary:** The distinction between user-facing 'template/conversation name' (which can contain spaces and special characters) and the internal 'base_name' (sanitized for use in filenames before versioning suffixes are added) is noted. Current usage within `TemplateManager` and `ConversationManager` and their helpers (`_sanitize_base_name`, `_construct_filename`) is functional. Terminology in code comments, internal documentation, and potentially user-facing error messages related to filenames could be reviewed for strict consistency during any future direct refactoring of these manager modules.
+
+### D. Architectural Considerations
+
+1.  **Conceptualize Centralized Configuration Management:**
+    *   **Status:** **V1 Concepts Detailed**
+    *   **Summary:** A detailed conceptual model for centralized configuration management has been defined in [`concepts/centralized_configuration.md`](./concepts/centralized_configuration.md). This includes the structure of a conceptual `AppConfig` object, examples of YAML and `.env` configuration files, a layered loading strategy (Environment Variables > Config Files > Hardcoded Defaults), preference for Dependency Injection for component access, and concepts for configuration validation. This provides a blueprint for managing system-wide settings.
+    *   **Next Steps (Future Work):** Actual Python implementation of `AppConfig` dataclass, config loading utilities, and integration into component constructors. Secure handling of secrets like system API keys.
+
 
 ---
 **Overall Status of V1 Conceptual Refinements:** All critical V1 refinements identified for core data structures and manager functionalities in subsection 7.A have now been completed and documented as "DONE." Items in 7.B (Conceptual Features & UI) correctly reflect their status as being primarily for future V2+ development or deeper conceptualization. The item in 7.C (Terminology & Consistency) is acknowledged for ongoing code-level attention during future refactoring. The V1 conceptual backend architecture and its core components are now considered stable, well-documented, and internally consistent based on the completion of this review cycle.

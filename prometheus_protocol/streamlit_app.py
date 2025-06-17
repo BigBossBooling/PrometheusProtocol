@@ -75,21 +75,21 @@ try:
     # or objects that need to maintain state across reruns IF that state isn't in st.session_state.
     # For file-based managers, re-initializing on each run is usually fine if paths are consistent.
 
-    DEFAULT_USER_ID = "default_streamlit_user" # App-wide default user ID
+    DEFAULT_USER_ID_FOR_STREAMLIT = "default_streamlit_user" # Renaming for clarity as per prompt, though DEFAULT_USER_ID existed
 
     @st.cache_resource # Cache resource for managers & executors
     def get_core_components():
         base_data_path = "prometheus_protocol_data_streamlit" # Store data in a subfolder
-        tm = TemplateManager(templates_dir=os.path.join(base_data_path, "templates"))
-        cm = ConversationManager(conversations_dir=os.path.join(base_data_path, "conversations"))
+        tm = TemplateManager(data_storage_base_path=base_data_path) # Updated
+        cm = ConversationManager(data_storage_base_path=base_data_path) # Updated
         usm = UserSettingsManager(settings_base_dir=os.path.join(base_data_path, "user_settings"))
 
         # Load or create default user settings
-        user_settings = usm.load_settings(DEFAULT_USER_ID)
+        user_settings = usm.load_settings(DEFAULT_USER_ID_FOR_STREAMLIT) # Use new constant
         if user_settings is None:
-            print(f"No settings found for {DEFAULT_USER_ID}, creating defaults.")
+            print(f"No settings found for {DEFAULT_USER_ID_FOR_STREAMLIT}, creating defaults.")
             user_settings = UserSettings(
-                user_id=DEFAULT_USER_ID,
+                user_id=DEFAULT_USER_ID_FOR_STREAMLIT, # Use new constant
                 default_jules_api_key="YOUR_HYPOTHETICAL_API_KEY", # Default placeholder
                 default_jules_model="jules-xl-default-model",
                 default_execution_settings={"temperature": 0.77, "max_tokens": 550},
@@ -99,7 +99,7 @@ try:
             )
             try:
                 usm.save_settings(user_settings)
-                print(f"Default settings saved for {DEFAULT_USER_ID}")
+                print(f"Default settings saved for {DEFAULT_USER_ID_FOR_STREAMLIT}")
             except Exception as e_usm_save:
                 print(f"Error saving initial default user settings: {e_usm_save}")
                 # Continue with in-memory default user_settings even if save fails
@@ -229,6 +229,9 @@ st.set_page_config(layout="wide", page_title="Prometheus Protocol - The Architec
 if 'menu_choice' not in st.session_state:
     st.session_state.menu_choice = "Dashboard"
 
+if 'active_context_id' not in st.session_state:
+    st.session_state.active_context_id = DEFAULT_USER_ID_FOR_STREAMLIT
+
 # For Prompt Editor
 if 'current_prompt_object' not in st.session_state: # Renamed from current_prompt for clarity
     st.session_state.current_prompt_object = None
@@ -303,12 +306,12 @@ if menu_choice == "Dashboard":
         st.subheader("Load Existing:")
         st.markdown("#### Recent Templates (Prompts):")
         try:
-            templates_dict = template_manager.list_templates()
+            templates_dict = template_manager.list_templates(context_id=st.session_state.active_context_id)
             if templates_dict:
                 for i, (name, versions) in enumerate(list(templates_dict.items())[:3]): # Show top 3
                     latest_version = versions[-1]
                     if st.button(f"📄 Load Template: '{name}' (v{latest_version})", key=f"dash_load_template_{name}_{i}"):
-                        st.session_state.current_prompt_object = template_manager.load_template(name, latest_version)
+                        st.session_state.current_prompt_object = template_manager.load_template(name, latest_version, context_id=st.session_state.active_context_id)
                         st.session_state.current_conversation_object = None
                         st.session_state.conversation_run_results = None
                         st.session_state.last_ai_response_single = None
@@ -322,12 +325,12 @@ if menu_choice == "Dashboard":
 
         st.markdown("#### Recent Conversations:")
         try:
-            conversations_dict = conversation_manager.list_conversations()
+            conversations_dict = conversation_manager.list_conversations(context_id=st.session_state.active_context_id)
             if conversations_dict:
                 for i, (name, versions) in enumerate(list(conversations_dict.items())[:3]): # Show top 3
                     latest_version = versions[-1]
                     if st.button(f"💬 Load Conversation: '{name}' (v{latest_version})", key=f"dash_load_conv_{name}_{i}"):
-                        st.session_state.current_conversation_object = conversation_manager.load_conversation(name, latest_version)
+                        st.session_state.current_conversation_object = conversation_manager.load_conversation(name, latest_version, context_id=st.session_state.active_context_id)
                         st.session_state.current_prompt_object = None
                         st.session_state.conversation_run_results = None
                         st.session_state.last_ai_response_single = None
@@ -404,7 +407,11 @@ elif menu_choice == "Prompt Editor":
                 try:
                     # Pass a copy to avoid manager modifying the session state object directly before user confirms UI update
                     prompt_to_save = PromptObject(**st.session_state.current_prompt_object.to_dict())
-                    saved_prompt = template_manager.save_template(prompt_to_save, st.session_state.save_template_name_input)
+                    saved_prompt = template_manager.save_template(
+                        prompt_to_save,
+                        st.session_state.save_template_name_input,
+                        context_id=st.session_state.active_context_id
+                    )
                     # Update session state with the potentially version-bumped prompt
                     st.session_state.current_prompt_object = saved_prompt
                     st.success(f"Template '{st.session_state.save_template_name_input}' saved as version {saved_prompt.version}!")
@@ -588,7 +595,11 @@ elif menu_choice == "Conversation Composer":
                 try:
                     # Pass a copy for saving
                     convo_to_save = Conversation(**st.session_state.current_conversation_object.to_dict())
-                    saved_convo = conversation_manager.save_conversation(convo_to_save, st.session_state.save_conversation_name_input)
+                    saved_convo = conversation_manager.save_conversation(
+                        convo_to_save,
+                        st.session_state.save_conversation_name_input,
+                        context_id=st.session_state.active_context_id
+                    )
                     st.session_state.current_conversation_object = saved_convo # Update with new version/LMT
                     st.success(f"Conversation '{st.session_state.save_conversation_name_input}' saved as version {saved_convo.version}!")
                     st.session_state.save_conversation_name_input = ""
@@ -724,7 +735,7 @@ elif menu_choice == "Template Library":
     st.header("Your Vault of Prompts: Template Library")
     st.markdown("Explore, load, and manage your saved PromptObject templates.")
     try:
-        templates = template_manager.list_templates() # Returns Dict[str, List[int]]
+        templates = template_manager.list_templates(context_id=st.session_state.active_context_id) # Returns Dict[str, List[int]]
         search_term_template = st.text_input("Search templates by name:", key="search_template_lib")
 
         if not templates:
@@ -746,7 +757,11 @@ elif menu_choice == "Template Library":
                 with col_display2: # Load Latest Button
                     if st.button(f"📂 Load Latest (v{latest_version})", key=f"tpl_load_latest_{base_name}"):
                         try:
-                            st.session_state.current_prompt_object = template_manager.load_template(base_name, latest_version)
+                            st.session_state.current_prompt_object = template_manager.load_template(
+                                base_name,
+                                latest_version,
+                                context_id=st.session_state.active_context_id
+                            )
                             st.session_state.menu_choice = "Prompt Editor"
                             st.session_state.current_conversation_object = None
                             st.session_state.conversation_run_results = None
@@ -771,7 +786,11 @@ elif menu_choice == "Template Library":
                     with cols_specific_load[1]:
                         if st.button(f"📂 Load v{version_to_load_specific}", key=f"tpl_load_specific_{base_name}_{version_to_load_specific}"):
                             try:
-                                st.session_state.current_prompt_object = template_manager.load_template(base_name, version_to_load_specific)
+                                st.session_state.current_prompt_object = template_manager.load_template(
+                                    base_name,
+                                    version_to_load_specific,
+                                    context_id=st.session_state.active_context_id
+                                )
                                 st.session_state.menu_choice = "Prompt Editor"
                                 st.session_state.current_conversation_object = None
                                 st.session_state.conversation_run_results = None
@@ -802,7 +821,10 @@ elif menu_choice == "Template Library":
                         col_confirm_all1, col_confirm_all2 = st.columns(2)
                         with col_confirm_all1:
                             if st.button("YES, DELETE ALL", key=f"yes_del_all_tpl_{base_name}", type="primary"):
-                                deleted_count = template_manager.delete_template_all_versions(base_name)
+                                deleted_count = template_manager.delete_template_all_versions(
+                                    base_name,
+                                    context_id=st.session_state.active_context_id
+                                )
                                 st.success(f"Deleted {deleted_count} version(s) of '{base_name}'.")
                                 del st.session_state[delete_all_key]
                                 st.experimental_rerun()
@@ -826,7 +848,11 @@ elif menu_choice == "Template Library":
                             col_confirm_spec1, col_confirm_spec2 = st.columns(2)
                             with col_confirm_spec1:
                                 if st.button(f"YES, DELETE v{version_num}", key=f"yes_del_tpl_{base_name}_v{version_num}", type="primary"):
-                                    deleted = template_manager.delete_template_version(base_name, version_num)
+                                    deleted = template_manager.delete_template_version(
+                                        base_name,
+                                        version_num,
+                                        context_id=st.session_state.active_context_id
+                                    )
                                     if deleted:
                                         st.success(f"Template '{base_name}' version {version_num} deleted.")
                                     else:
@@ -848,7 +874,8 @@ elif menu_choice == "Conversation Library":
     st.header("Your Dialogue Vault: Conversation Library")
     st.markdown("Manage and load your saved multi-turn conversations.")
     try:
-        conversations = conversation_manager.list_conversations()
+        # Use active_context_id for listing
+        conversations = conversation_manager.list_conversations(context_id=st.session_state.active_context_id)
         search_term_conv = st.text_input("Search conversations by name:", key="search_conv_lib")
 
         if not conversations:
@@ -870,7 +897,11 @@ elif menu_choice == "Conversation Library":
                 with col_display2_c: # Load Latest Button
                     if st.button(f"📂 Load Latest (v{latest_version})", key=f"cnv_load_latest_{base_name}"):
                         try:
-                            st.session_state.current_conversation_object = conversation_manager.load_conversation(base_name, latest_version)
+                            st.session_state.current_conversation_object = conversation_manager.load_conversation(
+                                base_name,
+                                latest_version,
+                                context_id=st.session_state.active_context_id # Pass context
+                            )
                             st.session_state.menu_choice = "Conversation Composer"
                             st.session_state.current_prompt_object = None
                             st.session_state.conversation_run_results = None
@@ -895,7 +926,11 @@ elif menu_choice == "Conversation Library":
                     with cols_specific_load_c[1]:
                         if st.button(f"📂 Load v{version_to_load_c}", key=f"cnv_load_specific_{base_name}_{version_to_load_c}"):
                             try:
-                                st.session_state.current_conversation_object = conversation_manager.load_conversation(base_name, version_to_load_c)
+                                st.session_state.current_conversation_object = conversation_manager.load_conversation(
+                                    base_name,
+                                    version_to_load_c,
+                                    context_id=st.session_state.active_context_id # Pass context
+                                )
                                 st.session_state.menu_choice = "Conversation Composer"
                                 st.session_state.current_prompt_object = None
                                 st.session_state.conversation_run_results = None
@@ -926,7 +961,10 @@ elif menu_choice == "Conversation Library":
                         col_confirm_all_c, col_cancel_all_c = st.columns(2)
                         with col_confirm_all_c:
                             if st.button("YES, DELETE ALL", key=f"yes_del_all_cnv_{base_name}", type="primary"):
-                                deleted_count = conversation_manager.delete_conversation_all_versions(base_name)
+                                deleted_count = conversation_manager.delete_conversation_all_versions(
+                                    base_name,
+                                    context_id=st.session_state.active_context_id # Pass context
+                                )
                                 st.success(f"Deleted {deleted_count} version(s) of conversation '{base_name}'.")
                                 del st.session_state[delete_all_key_c]
                                 st.experimental_rerun()
@@ -947,7 +985,11 @@ elif menu_choice == "Conversation Library":
                                 col_confirm_spec_c, col_cancel_spec_c = st.columns(2)
                                 with col_confirm_spec_c:
                                     if st.button(f"YES, DELETE v{version_num}", key=f"yes_del_cnv_{base_name}_v{version_num}", type="primary"):
-                                        deleted = conversation_manager.delete_conversation_version(base_name, version_num)
+                                        deleted = conversation_manager.delete_conversation_version(
+                                            base_name,
+                                            version_num,
+                                            context_id=st.session_state.active_context_id # Pass context
+                                        )
                                         if deleted:
                                             st.success(f"Conversation '{base_name}' version {version_num} deleted.")
                                         else:

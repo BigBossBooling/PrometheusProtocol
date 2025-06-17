@@ -18,8 +18,11 @@ class TestConversationManager(unittest.TestCase):
         """Set up a temporary directory for conversations before each test."""
         self._temp_dir_obj = tempfile.TemporaryDirectory()
         self.temp_dir_path_str = str(self._temp_dir_obj.name)
-        self.manager = ConversationManager(conversations_dir=self.temp_dir_path_str)
-        self.test_user_id = str(uuid.uuid4()) # Though not directly used by ConversationManager
+        self.manager = ConversationManager(data_storage_base_path=self.temp_dir_path_str) # Updated
+
+        self.personal_user_id = "test_user_conv_personal"
+        self.workspace_id_alpha = "ws_conv_alpha_space"
+        self.workspace_id_beta = "ws_conv_beta_space" # For testing an empty context
 
         # Base objects for creating conversations easily
         self.base_prompt_content = {
@@ -66,271 +69,243 @@ class TestConversationManager(unittest.TestCase):
         """Test saving a new convo creates v1, and subsequent saves increment version."""
         convo_name = "versioned_convo"
 
-        # First save
-        convo1_to_save = self._create_conversation_for_test("V1", task_for_turn1="Task V1", initial_version=5) # initial_version on obj is ignored by save
-        original_lmt1 = convo1_to_save.last_modified_at
-        time.sleep(0.001)
+        # Personal Context
+        convo1_user = self._create_conversation_for_test("V1_User", task_for_turn1="User Task V1")
+        self.manager.save_conversation(convo1_user, convo_name, context_id=self.personal_user_id)
+        user_context_path = self.manager._get_context_specific_conversations_path(self.personal_user_id)
+        expected_file_v1_user = user_context_path / self.manager._construct_filename(convo_name, 1)
+        self.assertTrue(expected_file_v1_user.exists())
+        with expected_file_v1_user.open('r') as f:
+            data_v1_user = json.load(f)
+        self.assertEqual(data_v1_user['version'], 1)
+        self.assertEqual(data_v1_user['title'], "Test Conversation V1_User")
 
-        returned_convo1 = self.manager.save_conversation(convo1_to_save, convo_name)
+        # Personal Context - Version 2
+        convo2_user = self._create_conversation_for_test("V2_User", task_for_turn1="User Task V2")
+        self.manager.save_conversation(convo2_user, convo_name, context_id=self.personal_user_id)
+        expected_file_v2_user = user_context_path / self.manager._construct_filename(convo_name, 2)
+        self.assertTrue(expected_file_v2_user.exists())
 
-        self.assertEqual(returned_convo1.version, 1, "Returned convo version should be 1 for first save.")
-        self.assertEqual(convo1_to_save.version, 1, "Original convo object version should be updated to 1.")
-        self.assertNotEqual(returned_convo1.last_modified_at, original_lmt1, "LMT should update on save V1.")
+        # Workspace Alpha Context - Version 1 (Same base name)
+        convo1_ws_alpha = self._create_conversation_for_test("V1_WS_Alpha", task_for_turn1="WS Alpha Task V1")
+        self.manager.save_conversation(convo1_ws_alpha, convo_name, context_id=self.workspace_id_alpha)
+        ws_alpha_context_path = self.manager._get_context_specific_conversations_path(self.workspace_id_alpha)
+        expected_file_v1_ws_alpha = ws_alpha_context_path / self.manager._construct_filename(convo_name, 1)
+        self.assertTrue(expected_file_v1_ws_alpha.exists())
+        with expected_file_v1_ws_alpha.open('r') as f:
+            data_v1_ws_alpha = json.load(f)
+        self.assertEqual(data_v1_ws_alpha['version'], 1)
+        self.assertEqual(data_v1_ws_alpha['title'], "Test Conversation V1_WS_Alpha")
 
-        expected_file_v1_name = self.manager._construct_filename(convo_name, 1)
-        expected_file_v1_path = self.manager.conversations_dir_path / expected_file_v1_name
-        self.assertTrue(expected_file_v1_path.exists(), f"{expected_file_v1_name} was not created.")
+        # Workspace Alpha Context - Different base name
+        other_convo_name_ws = "other_ws_convo"
+        convo_other_ws = self._create_conversation_for_test("Other_WS", task_for_turn1="Other WS Task")
+        self.manager.save_conversation(convo_other_ws, other_convo_name_ws, context_id=self.workspace_id_alpha)
+        expected_file_other_ws = ws_alpha_context_path / self.manager._construct_filename(other_convo_name_ws, 1)
+        self.assertTrue(expected_file_other_ws.exists())
 
-        with expected_file_v1_path.open('r') as f:
-            data_v1 = json.load(f)
-        self.assertEqual(data_v1['version'], 1)
-        self.assertEqual(data_v1['last_modified_at'], returned_convo1.last_modified_at)
-        self.assertEqual(data_v1['title'], "Test Conversation V1")
-
-        # Second save (same conversation name)
-        convo2_to_save = self._create_conversation_for_test("V2", task_for_turn1="Task V2 Content", initial_version=10)
-        original_lmt2 = convo2_to_save.last_modified_at
-        time.sleep(0.001)
-
-        returned_convo2 = self.manager.save_conversation(convo2_to_save, convo_name)
-
-        self.assertEqual(returned_convo2.version, 2, "Returned convo version should be 2 for second save.")
-        self.assertEqual(convo2_to_save.version, 2, "Original convo object for V2 save should be updated to 2.")
-        self.assertNotEqual(returned_convo2.last_modified_at, original_lmt2, "LMT should update on save V2.")
-
-        expected_file_v2_name = self.manager._construct_filename(convo_name, 2)
-        expected_file_v2_path = self.manager.conversations_dir_path / expected_file_v2_name
-        self.assertTrue(expected_file_v2_path.exists(), f"{expected_file_v2_name} was not created.")
-
-        with expected_file_v2_path.open('r') as f:
-            data_v2 = json.load(f)
-        self.assertEqual(data_v2['version'], 2)
-        self.assertEqual(data_v2['last_modified_at'], returned_convo2.last_modified_at)
-        self.assertEqual(data_v2['turns'][0]['prompt_object']['task'], "Task V2 Content")
 
     def test_save_conversation_name_sanitization(self):
-        """Test conversation name sanitization during save, creating versioned file."""
         convo_name = "My Test Convo with Spaces & Chars!@#"
         sanitized_base_name = "My_Test_Convo_with_Spaces__Chars"
         convo_to_save = self._create_conversation_for_test("Sanitize")
+        self.manager.save_conversation(convo_to_save, convo_name, context_id=self.personal_user_id)
 
-        self.manager.save_conversation(convo_to_save, convo_name)
-
+        context_path = self.manager._get_context_specific_conversations_path(self.personal_user_id)
         expected_file_name = self.manager._construct_filename(sanitized_base_name, 1)
-        expected_file_path = self.manager.conversations_dir_path / expected_file_name
-        self.assertTrue(expected_file_path.exists(), f"Expected file {expected_file_path} not found.")
+        expected_file_path = context_path / expected_file_name
+        self.assertTrue(expected_file_path.exists())
 
     def test_save_conversation_empty_name_raises_value_error(self):
-        """Test save_conversation raises ValueError for empty or whitespace name."""
         convo_to_save = self._create_conversation_for_test("EmptyName")
         with self.assertRaisesRegex(ValueError, "Conversation name cannot be empty or just whitespace."):
-            self.manager.save_conversation(convo_to_save, "")
+            self.manager.save_conversation(convo_to_save, "", context_id=self.personal_user_id)
         with self.assertRaisesRegex(ValueError, "Conversation name cannot be empty or just whitespace."):
-            self.manager.save_conversation(convo_to_save, "   ")
+            self.manager.save_conversation(convo_to_save, "   ", context_id=self.personal_user_id)
 
     def test_save_conversation_type_error(self):
-        """Test save_conversation raises TypeError for invalid input type."""
         with self.assertRaises(TypeError):
-            self.manager.save_conversation({"title": "fake"}, "wont_save")
+            self.manager.save_conversation({"title": "fake"}, "wont_save", context_id=self.personal_user_id)
 
 
-    # --- Tests for load_conversation (with versioning) ---
-    def test_load_conversation_latest_version(self):
-        """Test loading the latest version when no specific version is requested."""
-        convo_name = "load_latest_convo"
-        c1 = self._create_conversation_for_test("v1", task_for_turn1="Content v1")
-        self.manager.save_conversation(c1, convo_name) # Saves as v1
+    def test_load_conversation_latest_version_with_context(self):
+        convo_name = "load_latest_convo_ctx"
+        self.manager.save_conversation(self._create_conversation_for_test("v1", task_for_turn1="User V1"), convo_name, context_id=self.personal_user_id)
         time.sleep(0.001)
-        c2 = self._create_conversation_for_test("v2", task_for_turn1="Content v2")
-        self.manager.save_conversation(c2, convo_name) # Saves as v2
-        time.sleep(0.001)
-        c3 = self._create_conversation_for_test("v3", task_for_turn1="Content v3")
-        self.manager.save_conversation(c3, convo_name) # Saves as v3
+        self.manager.save_conversation(self._create_conversation_for_test("v2", task_for_turn1="User V2"), convo_name, context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("ws_v1", task_for_turn1="WS V1"), convo_name, context_id=self.workspace_id_alpha)
 
-        loaded_convo = self.manager.load_conversation(convo_name)
-        self.assertIsNotNone(loaded_convo)
-        self.assertEqual(loaded_convo.version, 3)
-        self.assertEqual(loaded_convo.turns[0].prompt_object.task, "Content v3")
+        loaded_user = self.manager.load_conversation(convo_name, context_id=self.personal_user_id)
+        self.assertEqual(loaded_user.version, 2)
+        self.assertEqual(loaded_user.turns[0].prompt_object.task, "User V2")
 
-    def test_load_conversation_specific_version(self):
-        """Test loading a specific version of a conversation."""
-        convo_name = "load_specific_convo"
-        c1 = self._create_conversation_for_test("v1", task_for_turn1="Content v1")
-        self.manager.save_conversation(c1, convo_name) # v1
-        time.sleep(0.001)
-        c2 = self._create_conversation_for_test("v2", task_for_turn1="Content v2")
-        self.manager.save_conversation(c2, convo_name) # v2
+        loaded_ws = self.manager.load_conversation(convo_name, context_id=self.workspace_id_alpha)
+        self.assertEqual(loaded_ws.version, 1)
+        self.assertEqual(loaded_ws.turns[0].prompt_object.task, "WS V1")
 
-        loaded_v1 = self.manager.load_conversation(convo_name, version=1)
-        self.assertIsNotNone(loaded_v1)
+    def test_load_conversation_specific_version_with_context(self):
+        convo_name = "load_specific_convo_ctx"
+        self.manager.save_conversation(self._create_conversation_for_test("v1", task_for_turn1="User V1"), convo_name, context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("v2", task_for_turn1="User V2"), convo_name, context_id=self.personal_user_id)
+
+        loaded_v1 = self.manager.load_conversation(convo_name, version=1, context_id=self.personal_user_id)
         self.assertEqual(loaded_v1.version, 1)
-        self.assertEqual(loaded_v1.turns[0].prompt_object.task, "Content v1")
+        self.assertEqual(loaded_v1.turns[0].prompt_object.task, "User V1")
 
-        loaded_v2 = self.manager.load_conversation(convo_name, version=2)
-        self.assertIsNotNone(loaded_v2)
+        loaded_v2 = self.manager.load_conversation(convo_name, version=2, context_id=self.personal_user_id)
         self.assertEqual(loaded_v2.version, 2)
-        self.assertEqual(loaded_v2.turns[0].prompt_object.task, "Content v2")
+        self.assertEqual(loaded_v2.turns[0].prompt_object.task, "User V2")
 
-    def test_load_conversation_specific_version_not_found(self):
-        """Test FileNotFoundError when a specific, non-existent version is requested."""
-        convo_name = "specific_version_missing_convo"
-        c1 = self._create_conversation_for_test("v1")
-        self.manager.save_conversation(c1, convo_name) # Only v1 exists
-        with self.assertRaisesRegex(FileNotFoundError, f"Version 2 for conversation '{convo_name}' not found"):
-            self.manager.load_conversation(convo_name, version=2)
+        # Try to load from wrong context
+        with self.assertRaisesRegex(FileNotFoundError, f"Version 1 for conversation '{convo_name}' not found in context '{self.workspace_id_alpha}'"):
+            self.manager.load_conversation(convo_name, version=1, context_id=self.workspace_id_alpha)
 
-    def test_load_conversation_no_versions_found(self):
-        """Test FileNotFoundError when no versions exist for a conversation name."""
-        with self.assertRaisesRegex(FileNotFoundError, "No versions found for conversation 'no_such_convo'"):
-            self.manager.load_conversation("no_such_convo")
 
-    def test_load_conversation_corrupted_json(self):
-        """Test ConversationCorruptedError for malformed JSON."""
-        convo_name = "corrupted_convo_json"
-        c1 = self._create_conversation_for_test("Corrupt")
-        self.manager.save_conversation(c1, convo_name) # v1
+    def test_load_conversation_specific_version_not_found_in_context(self):
+        convo_name = "specific_version_missing_convo_ctx"
+        self.manager.save_conversation(self._create_conversation_for_test("v1"), convo_name, context_id=self.personal_user_id)
+        with self.assertRaisesRegex(FileNotFoundError, f"Version 2 for conversation '{convo_name}' not found in context '{self.personal_user_id}'"):
+            self.manager.load_conversation(convo_name, version=2, context_id=self.personal_user_id)
 
-        file_path = self.manager.conversations_dir_path / self.manager._construct_filename(convo_name, 1)
+    def test_load_conversation_no_versions_found_in_context(self):
+        with self.assertRaisesRegex(FileNotFoundError, f"No versions found for conversation 'no_such_convo_ctx' in context '{self.workspace_id_beta}'"):
+            self.manager.load_conversation("no_such_convo_ctx", context_id=self.workspace_id_beta)
+
+    def test_load_conversation_corrupted_json_in_context(self):
+        convo_name = "corrupted_convo_json_ctx"
+        self.manager.save_conversation(self._create_conversation_for_test("Corrupt"), convo_name, context_id=self.personal_user_id)
+
+        context_path = self.manager._get_context_specific_conversations_path(self.personal_user_id)
+        file_path = context_path / self.manager._construct_filename(convo_name, 1)
         with file_path.open('w', encoding='utf-8') as f:
             f.write("{'invalid_json': this_is_not_valid,}")
 
-        with self.assertRaisesRegex(ConversationCorruptedError, "Corrupted conversation file.*invalid JSON"):
-            self.manager.load_conversation(convo_name, version=1)
+        with self.assertRaisesRegex(ConversationCorruptedError, f"Corrupted conversation file .* in context '{self.personal_user_id}'"):
+            self.manager.load_conversation(convo_name, version=1, context_id=self.personal_user_id)
 
-    def test_load_conversation_version_mismatch_warning(self):
-        """Test warning for version mismatch between filename and content (though content wins)."""
-        convo_name = "version_mismatch_convo"
-        convo_to_save = self._create_conversation_for_test("Mismatch Test") # Will be saved as v1
-        self.manager.save_conversation(convo_to_save, convo_name) # Filename is _v1.json
+    def test_load_conversation_version_mismatch_warning_in_context(self):
+        convo_name = "version_mismatch_convo_ctx"
+        convo_to_save = self._create_conversation_for_test("Mismatch Test")
+        self.manager.save_conversation(convo_to_save, convo_name, context_id=self.personal_user_id)
 
-        # Manually corrupt the file content to have a different version
-        file_path = self.manager.conversations_dir_path / self.manager._construct_filename(convo_name, 1)
-        with file_path.open('r', encoding='utf-8') as f:
-            data = json.load(f)
-        data['version'] = 99 # Change version in content
-        with file_path.open('w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+        context_path = self.manager._get_context_specific_conversations_path(self.personal_user_id)
+        file_path = context_path / self.manager._construct_filename(convo_name, 1)
+        with file_path.open('r', encoding='utf-8') as f: data = json.load(f)
+        data['version'] = 99
+        with file_path.open('w', encoding='utf-8') as f: json.dump(data, f, indent=4)
 
-        # Expect a print warning, but load should succeed based on content's version
-        # This test is more about observing the print for now, actual behavior might be stricter in future
-        loaded_convo = self.manager.load_conversation(convo_name, version=1) # Load by filename version
-        self.assertEqual(loaded_convo.version, 99) # Version from content
+        loaded_convo = self.manager.load_conversation(convo_name, version=1, context_id=self.personal_user_id)
+        self.assertEqual(loaded_convo.version, 99)
 
 
-    # --- Tests for list_conversations (with versioning) ---
-    def test_list_conversations_empty_directory(self):
-        """Test list_conversations returns an empty dict for an empty directory."""
-        self.assertEqual(self.manager.list_conversations(), {})
+    def test_list_conversations_empty_directory_with_context(self):
+        self.assertEqual(self.manager.list_conversations(context_id=self.workspace_id_beta), {})
 
-    def test_list_conversations_versioned(self):
-        """Test list_conversations returns a dict with base names and sorted version lists."""
-        # Save convoA v1, v2, v3
-        self.manager.save_conversation(self._create_conversation_for_test("A1"), "convoA")
-        time.sleep(0.001)
-        self.manager.save_conversation(self._create_conversation_for_test("A2"), "convoA")
-        time.sleep(0.001)
-        self.manager.save_conversation(self._create_conversation_for_test("A3"), "convoA")
+    def test_list_conversations_versioned_with_contexts(self):
+        # Personal context
+        self.manager.save_conversation(self._create_conversation_for_test("A1_user"), "convoA", context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("A2_user"), "convoA", context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("B1_user"), "convoB", context_id=self.personal_user_id)
 
-        # Save convoB v1
-        time.sleep(0.001)
-        self.manager.save_conversation(self._create_conversation_for_test("B1"), "convoB")
+        # Workspace Alpha context
+        self.manager.save_conversation(self._create_conversation_for_test("A1_ws"), "convoA", context_id=self.workspace_id_alpha)
+        self.manager.save_conversation(self._create_conversation_for_test("C1_ws"), "convoC", context_id=self.workspace_id_alpha)
 
-        # Save convo_with_space v1
-        time.sleep(0.001)
-        self.manager.save_conversation(self._create_conversation_for_test("S1"), "convo with space")
+        expected_user = {"convoA": [1, 2], "convoB": [1]}
+        self.assertEqual(self.manager.list_conversations(context_id=self.personal_user_id), expected_user)
 
-        expected_list = {
-            "convoA": [1, 2, 3],
-            "convoB": [1],
-            "convo_with_space": [1]
-        }
-        actual_list = self.manager.list_conversations()
-        self.assertEqual(actual_list, expected_list)
+        expected_ws_alpha = {"convoA": [1], "convoC": [1]}
+        self.assertEqual(self.manager.list_conversations(context_id=self.workspace_id_alpha), expected_ws_alpha)
 
-    def test_list_conversations_ignores_non_matching_files(self):
-        """Test list_conversations ignores files not matching the version pattern."""
-        self.manager.save_conversation(self._create_conversation_for_test("Valid"), "valid_convo")
+        self.assertEqual(self.manager.list_conversations(context_id=self.workspace_id_beta), {})
 
-        # Create some non-matching files
-        (self.manager.conversations_dir_path / "non_versioned.json").touch()
-        (self.manager.conversations_dir_path / "valid_convo_vx.json").touch()
-        (self.manager.conversations_dir_path / "another_v1.txt").touch()
-        (self.manager.conversations_dir_path / "prefix_valid_convo_v1.json").touch()
+        # Default context (None)
+        self.manager.save_conversation(self._create_conversation_for_test("D1_default"), "convoD", context_id=None)
+        expected_default = {"convoD": [1]}
+        self.assertEqual(self.manager.list_conversations(context_id=None), expected_default)
+
+
+    def test_list_conversations_ignores_non_matching_files_in_context(self):
+        context_path = self.manager._get_context_specific_conversations_path(self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("Valid"), "valid_convo", context_id=self.personal_user_id)
+
+        (context_path / "non_versioned.json").touch()
+        (context_path / "valid_convo_vx.json").touch()
+        (context_path / "another_v1.txt").touch()
 
         expected = {"valid_convo": [1]}
-        self.assertEqual(self.manager.list_conversations(), expected)
+        self.assertEqual(self.manager.list_conversations(context_id=self.personal_user_id), expected)
 
-    # --- Tests for Delete Methods ---
+    # --- Tests for Delete Methods (Context-Aware) ---
 
-    def test_delete_conversation_version_success(self):
-        """Test deleting a specific version of a conversation successfully."""
-        convo_name = "delete_version_convo_test"
+    def test_delete_conversation_version_success_with_context(self):
+        convo_name = "delete_version_ctx_convo"
         sanitized_name = self.manager._sanitize_base_name(convo_name)
-        # Save a few versions
-        c1 = self._create_conversation_for_test("v1", task_for_turn1="ConvoV1 Task")
-        self.manager.save_conversation(c1, convo_name) # Saves as v1
-        c2 = self._create_conversation_for_test("v2", task_for_turn1="ConvoV2 Task")
-        self.manager.save_conversation(c2, convo_name) # Saves as v2
 
-        file_v1 = self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 1)
-        self.assertTrue(file_v1.exists())
+        self.manager.save_conversation(self._create_conversation_for_test("v1_user"), convo_name, context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("v2_user"), convo_name, context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("v1_ws"), convo_name, context_id=self.workspace_id_alpha)
 
-        delete_result = self.manager.delete_conversation_version(convo_name, 1)
-        self.assertTrue(delete_result, "delete_conversation_version should return True on success.")
-        self.assertFalse(file_v1.exists(), "Version 1 file should be deleted.")
+        user_context_path = self.manager._get_context_specific_conversations_path(self.personal_user_id)
+        file_v1_user = user_context_path / self.manager._construct_filename(sanitized_name, 1)
+        self.assertTrue(file_v1_user.exists())
 
-        file_v2 = self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 2)
-        self.assertTrue(file_v2.exists(), "Version 2 file should still exist.")
+        delete_result = self.manager.delete_conversation_version(convo_name, 1, context_id=self.personal_user_id)
+        self.assertTrue(delete_result)
+        self.assertFalse(file_v1_user.exists())
 
-        listed_convos = self.manager.list_conversations()
-        self.assertIn(sanitized_name, listed_convos)
-        self.assertEqual(listed_convos[sanitized_name], [2])
+        file_v2_user = user_context_path / self.manager._construct_filename(sanitized_name, 2)
+        self.assertTrue(file_v2_user.exists())
 
-    def test_delete_conversation_version_non_existent_version(self):
-        """Test deleting a non-existent version of a conversation."""
-        convo_name = "delete_non_existent_convo_version"
+        ws_alpha_context_path = self.manager._get_context_specific_conversations_path(self.workspace_id_alpha)
+        file_v1_ws = ws_alpha_context_path / self.manager._construct_filename(sanitized_name, 1)
+        self.assertTrue(file_v1_ws.exists())
+
+        listed_user = self.manager.list_conversations(context_id=self.personal_user_id)
+        self.assertEqual(listed_user.get(sanitized_name), [2])
+        listed_ws = self.manager.list_conversations(context_id=self.workspace_id_alpha)
+        self.assertEqual(listed_ws.get(sanitized_name), [1])
+
+    def test_delete_conversation_version_non_existent_version_with_context(self):
+        convo_name = "del_non_exist_ver_ctx_convo"
+        self.manager.save_conversation(self._create_conversation_for_test("v1"), convo_name, context_id=self.personal_user_id)
+        delete_result = self.manager.delete_conversation_version(convo_name, 5, context_id=self.personal_user_id)
+        self.assertFalse(delete_result)
+
+    def test_delete_conversation_version_non_existent_name_with_context(self):
+        delete_result = self.manager.delete_conversation_version("no_such_convo_ctx", 1, context_id=self.personal_user_id)
+        self.assertFalse(delete_result)
+
+    def test_delete_conversation_all_versions_success_with_context(self):
+        convo_name = "del_all_ctx_convo"
         sanitized_name = self.manager._sanitize_base_name(convo_name)
-        c1 = self._create_conversation_for_test("v1")
-        self.manager.save_conversation(c1, convo_name) # Only v1 exists
 
-        delete_result = self.manager.delete_conversation_version(convo_name, 5)
-        self.assertFalse(delete_result, "delete_conversation_version should return False for non-existent version.")
+        self.manager.save_conversation(self._create_conversation_for_test("v1_user"), convo_name, context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("v2_user"), convo_name, context_id=self.personal_user_id)
+        self.manager.save_conversation(self._create_conversation_for_test("v1_ws_alpha"), convo_name, context_id=self.workspace_id_alpha)
+        other_convo_ws_alpha = "other_ws_alpha_convo"
+        sanitized_other_ws_alpha = self.manager._sanitize_base_name(other_convo_ws_alpha)
+        self.manager.save_conversation(self._create_conversation_for_test("other_ws"), other_convo_ws_alpha, context_id=self.workspace_id_alpha)
 
-        file_v1 = self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 1)
-        self.assertTrue(file_v1.exists())
+        deleted_count_user = self.manager.delete_conversation_all_versions(convo_name, context_id=self.personal_user_id)
+        self.assertEqual(deleted_count_user, 2)
 
-    def test_delete_conversation_version_non_existent_name(self):
-        """Test deleting a version from a non-existent conversation base name."""
-        delete_result = self.manager.delete_conversation_version("no_such_convo_ever", 1)
-        self.assertFalse(delete_result, "delete_conversation_version should return False for non-existent name.")
+        user_context_path = self.manager._get_context_specific_conversations_path(self.personal_user_id)
+        self.assertFalse((user_context_path / self.manager._construct_filename(sanitized_name, 1)).exists())
+        self.assertFalse((user_context_path / self.manager._construct_filename(sanitized_name, 2)).exists())
 
-    def test_delete_conversation_all_versions_success(self):
-        """Test deleting all versions of a conversation successfully."""
-        convo_name = "delete_all_convo_test"
-        sanitized_name = self.manager._sanitize_base_name(convo_name)
-        self.manager.save_conversation(self._create_conversation_for_test("v1"), convo_name) # v1
-        self.manager.save_conversation(self._create_conversation_for_test("v2"), convo_name) # v2
-        self.manager.save_conversation(self._create_conversation_for_test("v3"), convo_name) # v3
+        listed_user = self.manager.list_conversations(context_id=self.personal_user_id)
+        self.assertNotIn(sanitized_name, listed_user)
 
-        other_convo_name = "other_convo"
-        sanitized_other_name = self.manager._sanitize_base_name(other_convo_name)
-        self.manager.save_conversation(self._create_conversation_for_test("other"), other_convo_name)
+        ws_alpha_context_path = self.manager._get_context_specific_conversations_path(self.workspace_id_alpha)
+        self.assertTrue((ws_alpha_context_path / self.manager._construct_filename(sanitized_name, 1)).exists())
+        self.assertTrue((ws_alpha_context_path / self.manager._construct_filename(sanitized_other_ws_alpha, 1)).exists())
+        listed_ws_alpha = self.manager.list_conversations(context_id=self.workspace_id_alpha)
+        self.assertIn(sanitized_name, listed_ws_alpha)
+        self.assertIn(sanitized_other_ws_alpha, listed_ws_alpha)
 
-        deleted_count = self.manager.delete_conversation_all_versions(convo_name)
-        self.assertEqual(deleted_count, 3)
-
-        self.assertFalse((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 1)).exists())
-        self.assertFalse((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 2)).exists())
-        self.assertFalse((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_name, 3)).exists())
-
-        listed_convos = self.manager.list_conversations()
-        self.assertNotIn(sanitized_name, listed_convos)
-        self.assertIn(sanitized_other_name, listed_convos)
-        self.assertTrue((self.manager.conversations_dir_path / self.manager._construct_filename(sanitized_other_name, 1)).exists())
-
-    def test_delete_conversation_all_versions_non_existent_name(self):
-        """Test deleting all versions for a non-existent conversation base name."""
-        deleted_count = self.manager.delete_conversation_all_versions("no_such_convo_for_all_delete")
+    def test_delete_conversation_all_versions_non_existent_name_with_context(self):
+        deleted_count = self.manager.delete_conversation_all_versions("no_such_all_del_ctx_convo", context_id=self.personal_user_id)
         self.assertEqual(deleted_count, 0)
 
 
