@@ -154,6 +154,79 @@ struct ConceptualPageSummaryResponse {
 };
 // --- End conceptual structs for GetPageSummary ---
 
+// --- Conceptual C++ structs for new HandleContentCreation RPC ---
+enum class ConceptualWritingAssistanceTypeProto {
+    UNSPECIFIED = 0, REPHRASE_GENERAL = 1, REPHRASE_CASUAL = 2, REPHRASE_FORMAL = 3,
+    REPHRASE_CONCISE = 4, REPHRASE_EXPAND = 5, CORRECT_GRAMMAR_SPELLING = 6,
+    CHANGE_TONE_FRIENDLY = 7, CHANGE_TONE_PROFESSIONAL = 8, CHANGE_TONE_PERSUASIVE = 9
+};
+struct ConceptualWritingAssistanceOptionsProto {
+    ConceptualWritingAssistanceTypeProto assistance_type = ConceptualWritingAssistanceTypeProto::UNSPECIFIED;
+    std::string original_language;
+};
+struct ConceptualLanguagePairProto {
+    std::string source_language;
+    std::string target_language;
+};
+enum class ConceptualCreativeContentTypeProto {
+    UNSPECIFIED = 0, EMAIL_DRAFT = 1, SOCIAL_MEDIA_POST_TWITTER = 2, SOCIAL_MEDIA_POST_LINKEDIN = 3,
+    BLOG_POST_INTRO = 4, PRODUCT_DESCRIPTION = 5, BRAINSTORM_IDEAS_LIST = 6,
+    SHORT_STORY_SNIPPET = 7, POEM_SNIPPET = 8, HEADLINE_SUGGESTIONS = 9
+};
+struct ConceptualCreativeContentOptionsProto {
+    ConceptualCreativeContentTypeProto content_type = ConceptualCreativeContentTypeProto::UNSPECIFIED;
+    std::string topic_or_brief;
+    int32_t desired_length_words = 0;
+    std::string desired_tone;
+};
+
+// Forward declare the request types for the oneof
+struct ConceptualWritingAssistanceRpcRequest;
+struct ConceptualTranslationRpcRequest;
+struct ConceptualCreativeContentRpcRequest;
+
+// Using a union for oneof is complex without actual codegen.
+// For conceptual C++, we'll use optional members or a type enum + void* / std::any.
+// Simpler: define a wrapper that indicates which type is set.
+enum class ConceptualContentCreationRequestType {
+    NONE,
+    WRITING_ASSISTANCE,
+    TRANSLATION,
+    CREATIVE_CONTENT
+};
+
+struct ConceptualWritingAssistanceRpcRequest {
+    std::string selected_text;
+    ConceptualWritingAssistanceOptionsProto options;
+};
+struct ConceptualTranslationRpcRequest {
+    std::string text_to_translate;
+    ConceptualLanguagePairProto languages;
+};
+struct ConceptualCreativeContentRpcRequest {
+    ConceptualCreativeContentOptionsProto options;
+};
+
+struct ConceptualContentCreationRpcRequest {
+    ConceptualContentCreationRequestType active_request_type = ConceptualContentCreationRequestType::NONE;
+    // Store pointers to specific request types or use std::variant if C++17 is available
+    // For C++11 conceptual, using optional-like approach:
+    std::unique_ptr<ConceptualWritingAssistanceRpcRequest> writing_assistance_request;
+    std::unique_ptr<ConceptualTranslationRpcRequest> translation_request;
+    std::unique_ptr<ConceptualCreativeContentRpcRequest> creative_content_request;
+
+    std::string user_id;
+    std::string session_id;
+};
+
+struct ConceptualContentCreationRpcResponse {
+    std::string resulting_text;
+    std::string error_message;
+    std::map<std::string, std::string> metadata;
+};
+// --- End conceptual structs for HandleContentCreation ---
+
+
 } // namespace asol
 } // namespace dashai_browser
 } // namespace prometheus_ecosystem

@@ -229,3 +229,159 @@ This section details the UI/UX for an on-demand content summarization feature, l
     *   **Feedback (Separate Flow):** User can provide feedback on the summary, triggering the `SubmitPromptFeedback` flow detailed previously.
 
 This detailed scenario validates the entire conceptual pipeline from browser UI interaction, through Mojo IPC, ASOL's gRPC service handling, delegation to the (mocked) AI-vCPU, and the response path back to the UI.
+
+## VI. Conceptual Integration Test Scenarios for AI-Assisted Content Creation
+
+These scenarios outline end-to-end tests for the "Jules Assistant" features, focusing on the data flow and interaction between browser UI, Mojo IPC, ASOL, and the (mocked) AI-vCPU.
+
+### A. Scenario 1: Inline Rephrasing (Formal Tone)
+
+1.  **Setup:**
+    *   DashAIBrowser is running.
+    *   ASOL gRPC service with `HandleContentCreation` RPC is conceptually running.
+    *   ASOL's internal Mojo service host for `dashaibrowser.mojom.ContentCreator` is running.
+    *   `MockEchoSphereVCPU` is injected into `AsolServiceImpl`.
+    *   A webpage with an active text input field is loaded.
+
+2.  **User Action (Inline Rephrase):**
+    *   User types "Cant make it to the mtg tmrw." into the text field.
+    *   User selects this text.
+    *   User clicks the "Jules Spark" icon (or right-clicks for context menu) and selects "Rewrite Selection" -> "Make More Formal."
+
+3.  **Browser-Side Action (Conceptual `ContentCreationService`):**
+    *   The browser's UI logic captures the selected text and the chosen action.
+    *   It calls `ContentCreationService::RequestWritingAssistance("Cant make it to the mtg tmrw.", {assistance_type: REPHRASE_FORMAL}, callback)`.
+
+4.  **Mojo IPC (Browser to ASOL):**
+    *   `ContentCreationService` uses its Mojo remote to call `ContentCreator::RequestWritingAssistance(...)` which crosses to ASOL.
+
+5.  **ASOL - Mojo Service Implementation (`ContentCreatorImpl` - Conceptual):**
+    *   The `ContentCreatorImpl::RequestWritingAssistance` method in ASOL is invoked.
+    *   It constructs a `ContentCreationRpcRequest` (gRPC message) with:
+        *   `writing_assistance.selected_text = "Cant make it to the mtg tmrw."`
+        *   `writing_assistance.options.assistance_type = WritingAssistanceTypeProto.REPHRASE_FORMAL`
+    *   It makes a local gRPC call to `AsolServiceImpl::HandleContentCreation`.
+
+6.  **ASOL - `AsolServiceImpl::HandleContentCreation` (gRPC method):**
+    *   Receives `ContentCreationRpcRequest`.
+    *   Constructs `core::ConceptualAiTaskRequest`:
+        *   `task_type = "REPHRASE_FORMAL"` (derived from `WritingAssistanceTypeToString`)
+        *   `input_data["selected_text"] = "Cant make it to the mtg tmrw."`
+        *   `required_specialization = ConceptualAiCoreSpecialization::LANGUAGE_MODELER`
+    *   Calls `vcpu_interface_->SubmitTask(ai_task_request)`.
+
+7.  **EchoSphere AI-vCPU (Mocked):**
+    *   `MockEchoSphereVCPU::SubmitTask` is called.
+    *   It's configured to expect a "REPHRASE_FORMAL" task for the given input.
+    *   Returns a predefined `core::ConceptualAiTaskResponse`:
+        *   `success: true`
+        *   `output_data["resulting_text"] = "Unfortunately, I am unable to attend the meeting tomorrow."`
+        *   `processed_by_core_id = "mock_lang_modeler_01"`
+
+8.  **ASOL - `AsolServiceImpl::HandleContentCreation` (Response Handling):**
+    *   Receives `AiTaskResponse`.
+    *   Populates `ConceptualContentCreationRpcResponse`:
+        *   `resulting_text = "Unfortunately, I am unable to attend the meeting tomorrow."`
+    *   Returns this to `ContentCreatorImpl`.
+
+9.  **ASOL - Mojo Service Implementation (`ContentCreatorImpl` - Callback):**
+    *   Receives `ContentCreationRpcResponse`.
+    *   Invokes the Mojo callback from `ContentCreationService` with `("Unfortunately, I am unable to attend the meeting tomorrow.", "")`.
+
+10. **Browser-Side Action (`ContentCreationService` Callback & UI Update):**
+    *   The callback in `ContentCreationService` receives the rephrased text.
+    *   The service (or its caller) updates the text field in the browser UI, replacing the original selection with "Unfortunately, I am unable to attend the meeting tomorrow."
+
+### B. Scenario 2: Translation
+
+*   **Similar flow as above**, but:
+    *   User action: Select text, choose "Translate to Spanish."
+    *   Mojo call: `RequestTranslation("Hello world", {source_language:"en", target_language:"es"})`.
+    *   ASOL `ContentCreatorImpl` calls `HandleContentCreation` with `translation_request`.
+    *   `AsolServiceImpl` creates `AiTaskRequest` with `task_type: "TRANSLATE_TEXT"`, `input_data` containing text and language pair.
+    *   `MockEchoSphereVCPU` returns `output_data["resulting_text"] = "Hola mundo"`.
+    *   UI updated with "Hola mundo".
+
+### C. Scenario 3: Creative Content Generation (Email Draft)
+
+*   **User Action:** Uses "Jules Assistant" sidebar, selects "Draft an email," inputs: Topic="Project Update Request," Key Points="Need status on Task A, Blocker for Task B, Deadline is Friday," Tone="Professional but urgent."
+*   **Mojo Call:** `GenerateCreativeContent({content_type: EMAIL_DRAFT, topic_or_brief:"Project Update Request...", desired_tone:"Professional but urgent", ...})`.
+*   **ASOL `ContentCreatorImpl`** calls `HandleContentCreation` with `creative_content_request`.
+*   **`AsolServiceImpl`** creates `AiTaskRequest` with `task_type: "EMAIL_DRAFT"`, `input_data` containing all options. Sets `required_specialization = CREATIVE_GENERATOR`.
+*   **`MockEchoSphereVCPU`** returns `output_data["resulting_text"] = "<Well-structured draft email text...>"`.
+*   UI (email body or sidebar) updated with the draft.
+
+These scenarios cover different AI assistance types, ensuring the UI, Mojo interfaces, ASOL routing, and AI-vCPU task delegation (mocked) are all conceptually tested.
+
+## V. Feature: AI-Assisted Content Creation & Interaction ("Jules Assistant")
+
+This section details the UI/UX for AI-powered assistance directly within text input fields across DashAIBrowser, enabling users to rephrase, translate, correct, or generate content.
+
+### A. Activation Points & UI Elements
+
+1.  **Contextual AI Icon ("Jules Spark"):**
+    *   **Appearance:** A small, unobtrusive icon (e.g., "✨" or a stylized "J") appears within or adjacent to active text input fields (e.g., `textarea`, rich text editors, input fields in web forms) when the user starts typing or focuses on the field.
+    *   **Interaction:**
+        *   **Hover/Focus:** The icon might subtly glow or animate to indicate availability.
+        *   **Click:** Clicking the icon opens a small, contextual pop-up menu with quick AI actions.
+
+2.  **Context Menu Integration (Text Selection Dependant):**
+    *   When text is selected within an editable field or on a webpage:
+        *   Right-clicking the selection reveals "Jules AI Assist" submenu with options like:
+            *   "Rewrite Selection" (with sub-options: Casual, Formal, Concise, Expand)
+            *   "Correct Grammar & Spelling"
+            *   "Change Tone To..." (with sub-options: Friendly, Professional, etc.)
+            *   "Translate Selection to..." (with a language picker or common languages)
+            *   "Explain This" (if applicable, could trigger summarization or definition)
+            *   "Brainstorm from Selection..." (uses selection as a seed for idea generation)
+
+3.  **"Jules Assistant" Sidebar/Panel:**
+    *   **Activation:**
+        *   Can be opened via a dedicated browser toolbar button.
+        *   Automatically slides out or becomes more prominent when a text field is focused for an extended period or if complex AI assistance is invoked.
+    *   **Content & Tools:**
+        *   **Quick Actions:** Buttons for common tasks (Rewrite, Summarize, Translate) applied to the currently focused text field or selected text.
+        *   **Tone & Style Adjusters:** Sliders or dropdowns (e.g., Formality: Casual <-> Formal; Length: Concise <-> Expanded).
+        *   **Custom Prompt Input:** A text area where users can type a direct instruction to "Jules" regarding the selected text or the current writing task (e.g., "Make this paragraph sound more persuasive," "Generate three alternative headlines for this blog post draft"). This would leverage Prometheus Protocol for more complex, ad-hoc prompt generation.
+        *   **Content Generation Tools:**
+            *   "Draft an email about..."
+            *   "Write a social media post for..."
+            *   "Help me brainstorm ideas for..."
+            *   These would present specific input fields relevant to the task (e.g., for email: recipient type, key points, desired tone).
+        *   **History/Scratchpad:** Shows recent AI interactions or generated snippets for easy reuse.
+
+### B. Interaction Flow Examples
+
+1.  **Inline Rephrasing:**
+    *   User types a sentence in an email: "I can't make the meeting tomorrow."
+    *   The "Jules Spark" icon appears. User clicks it.
+    *   Popover menu: "Rephrase: More Formal," "Rephrase: More Polite," "Make Concise."
+    *   User clicks "Rephrase: More Formal."
+    *   **Browser-Side Action:** `ContentCreationService` captures the sentence.
+    *   **Mojo Call:** `RequestWritingAssistance("I can't make the meeting tomorrow.", {assistance_type: REPHRASE_FORMAL})`.
+    *   **ASOL & AI-vCPU:** Request routed, AI-vCPU (Language_Modeler) processes.
+    *   **Result:** The original sentence is replaced with, e.g., "Unfortunately, I will be unable to attend the meeting scheduled for tomorrow."
+
+2.  **Translation via Context Menu:**
+    *   User selects a paragraph of text on a foreign language webpage.
+    *   User right-clicks, selects "Jules AI Assist" -> "Translate Selection to..." -> "English."
+    *   **Browser-Side Action:** `ContentCreationService` gets selected text.
+    *   **Mojo Call:** `RequestTranslation(selected_text, {source_language: "auto_detect_or_page_lang", target_language: "en-US"})`.
+    *   **ASOL & AI-vCPU/External API:** Request routed. ASOL might use AI-vCPU's Language_Modeler or an external Translation API.
+    *   **Result:** A pop-up/sidebar displays the translated text with options to copy or replace.
+
+3.  **Generating Email Draft via Sidebar:**
+    *   User focuses on the email body. "Jules Assistant" sidebar is open.
+    *   User clicks "Draft an email about..."
+    *   Sidebar shows fields: "Topic/Subject:", "Key points to include:", "Recipient Relationship (e.g., colleague, client):", "Desired Tone:".
+    *   User fills these and clicks "Generate Draft."
+    *   **Browser-Side Action:** `ContentCreationService` gathers inputs.
+    *   **Mojo Call:** `GenerateCreativeContent({content_type: EMAIL_DRAFT, topic_or_brief: "...", desired_tone: "...", ...})`.
+    *   **ASOL & AI-vCPU:** Request routed to AI-vCPU (Creative_Generator core).
+    *   **Result:** The generated email draft is inserted into the email body or shown in the sidebar for review and insertion.
+
+### C. Visual Cues & Feedback
+
+*   **Loading/Processing:** When AI is working, the "Jules Spark" icon might animate, or a subtle progress indicator could appear near the text field/sidebar.
+*   **Suggestions:** AI suggestions (e.g., alternative phrasing, corrections) could appear as inline annotations (like Grammarly) or in a diff view.
+*   **Feedback:** Standard thumbs up/down and a "Report Issue/Suggest Improvement" option for all AI-generated/assisted content, linking to the `SubmitPromptFeedback` flow.

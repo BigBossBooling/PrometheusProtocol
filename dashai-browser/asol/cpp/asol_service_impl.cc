@@ -369,6 +369,131 @@ grpc::Status AsolServiceImpl::GetPageSummary(
 }
 
 
+// --- Helper to convert Conceptual enums to string for AI Task ---
+std::string WritingAssistanceTypeToString(ConceptualWritingAssistanceTypeProto type) {
+    switch (type) {
+        case ConceptualWritingAssistanceTypeProto::REPHRASE_GENERAL: return "REPHRASE_GENERAL";
+        case ConceptualWritingAssistanceTypeProto::REPHRASE_CASUAL: return "REPHRASE_CASUAL";
+        case ConceptualWritingAssistanceTypeProto::REPHRASE_FORMAL: return "REPHRASE_FORMAL";
+        case ConceptualWritingAssistanceTypeProto::REPHRASE_CONCISE: return "REPHRASE_CONCISE";
+        case ConceptualWritingAssistanceTypeProto::REPHRASE_EXPAND: return "REPHRASE_EXPAND";
+        case ConceptualWritingAssistanceTypeProto::CORRECT_GRAMMAR_SPELLING: return "CORRECT_GRAMMAR_SPELLING";
+        case ConceptualWritingAssistanceTypeProto::CHANGE_TONE_FRIENDLY: return "CHANGE_TONE_FRIENDLY";
+        case ConceptualWritingAssistanceTypeProto::CHANGE_TONE_PROFESSIONAL: return "CHANGE_TONE_PROFESSIONAL";
+        case ConceptualWritingAssistanceTypeProto::CHANGE_TONE_PERSUASIVE: return "CHANGE_TONE_PERSUASIVE";
+        default: return "UNSPECIFIED_WRITING_ASSISTANCE";
+    }
+}
+
+std::string CreativeContentTypeToString(ConceptualCreativeContentTypeProto type) {
+    switch (type) {
+        case ConceptualCreativeContentTypeProto::EMAIL_DRAFT: return "EMAIL_DRAFT";
+        case ConceptualCreativeContentTypeProto::SOCIAL_MEDIA_POST_TWITTER: return "SOCIAL_MEDIA_POST_TWITTER";
+        case ConceptualCreativeContentTypeProto::SOCIAL_MEDIA_POST_LINKEDIN: return "SOCIAL_MEDIA_POST_LINKEDIN";
+        // ... add all other cases
+        default: return "UNSPECIFIED_CREATIVE_CONTENT";
+    }
+}
+// --- End Helper ---
+
+
+grpc::Status AsolServiceImpl::HandleContentCreation(
+    grpc::ServerContext* context,
+    const ConceptualContentCreationRpcRequest* request,
+    ConceptualContentCreationRpcResponse* response) {
+
+    std::cout << "[AsolServiceImpl] Received HandleContentCreation request." << std::endl;
+    if (!request || !response) {
+        std::cerr << "[AsolServiceImpl] Error: ContentCreationRpcRequest or Response object is null." << std::endl;
+        if(response) response->error_message = "Request or Response object is null.";
+        return grpc::Status::OK;
+    }
+
+    core::ConceptualAiTaskRequest ai_task_request;
+    ai_task_request.task_id = "asol_content_creation_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+    if(!request->user_id.empty()) ai_task_request.user_id = request->user_id;
+    if(!request->session_id.empty()) ai_task_request.session_id = request->session_id;
+
+    bool request_valid = false;
+
+    if (request->active_request_type == ConceptualContentCreationRequestType::WRITING_ASSISTANCE && request->writing_assistance_request) {
+        const auto& wa_req = *request->writing_assistance_request;
+        ai_task_request.task_type = WritingAssistanceTypeToString(wa_req.options.assistance_type);
+        ai_task_request.input_data["selected_text"] = wa_req.selected_text;
+        if (!wa_req.options.original_language.empty()) {
+            ai_task_request.input_data["original_language"] = wa_req.options.original_language;
+        }
+        ai_task_request.required_specialization = core::ConceptualAiCoreSpecialization::LANGUAGE_MODELER;
+        request_valid = true;
+        std::cout << "  Type: Writing Assistance (" << ai_task_request.task_type << ")" << std::endl;
+    } else if (request->active_request_type == ConceptualContentCreationRequestType::TRANSLATION && request->translation_request) {
+        const auto& tr_req = *request->translation_request;
+        ai_task_request.task_type = "TRANSLATE_TEXT";
+        ai_task_request.input_data["text_to_translate"] = tr_req.text_to_translate;
+        ai_task_request.input_data["source_language"] = tr_req.languages.source_language;
+        ai_task_request.input_data["target_language"] = tr_req.languages.target_language;
+        ai_task_request.required_specialization = core::ConceptualAiCoreSpecialization::LANGUAGE_MODELER; // Or a dedicated translation core/API
+        request_valid = true;
+        std::cout << "  Type: Translation" << std::endl;
+    } else if (request->active_request_type == ConceptualContentCreationRequestType::CREATIVE_CONTENT && request->creative_content_request) {
+        const auto& cc_req = *request->creative_content_request;
+        ai_task_request.task_type = CreativeContentTypeToString(cc_req.options.content_type);
+        ai_task_request.input_data["topic_or_brief"] = cc_req.options.topic_or_brief;
+        if (cc_req.options.desired_length_words > 0) {
+            ai_task_request.input_data["desired_length_words"] = std::to_string(cc_req.options.desired_length_words);
+        }
+        if (!cc_req.options.desired_tone.empty()) {
+            ai_task_request.input_data["desired_tone"] = cc_req.options.desired_tone;
+        }
+        ai_task_request.required_specialization = core::ConceptualAiCoreSpecialization::CREATIVE_GENERATOR;
+        request_valid = true;
+        std::cout << "  Type: Creative Content (" << ai_task_request.task_type << ")" << std::endl;
+    } else {
+        response->error_message = "Invalid or unspecified content creation request type.";
+        std::cerr << "[AsolServiceImpl] " << response->error_message << std::endl;
+        return grpc::Status::OK;
+    }
+
+    if (!request_valid) { // Should have been caught by the else above, but as a safeguard.
+         response->error_message = "Content creation request was not valid.";
+         return grpc::Status::OK;
+    }
+
+    std::cout << "[AsolServiceImpl] Submitting task '" << ai_task_request.task_type << "' to AI-vCPU." << std::endl;
+
+    try {
+        core::ConceptualAiTaskResponse vcpu_response = vcpu_interface_->SubmitTask(ai_task_request);
+        if (vcpu_response.success) {
+            response->resulting_text = vcpu_response.output_data.count("resulting_text") ? vcpu_response.output_data.at("resulting_text") :
+                                     (vcpu_response.output_data.count("translated_text") ? vcpu_response.output_data.at("translated_text") :
+                                     (vcpu_response.output_data.count("generated_content") ? vcpu_response.output_data.at("generated_content") :
+                                     "Error: Expected text output not found in vCPU response."));
+            response->error_message = "";
+            response->metadata = vcpu_response.performance_metrics; // Or specific metadata
+            if (vcpu_response.output_data.count("detected_language")) {
+                 response->metadata["detected_language"] = vcpu_response.output_data.at("detected_language");
+            }
+        } else {
+            response->resulting_text = "";
+            response->error_message = "AI-vCPU content creation task failed: " + vcpu_response.error_message;
+            std::cerr << "[AsolServiceImpl] AI-vCPU task '" << ai_task_request.task_type << "' failed: " << vcpu_response.error_message << std::endl;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[AsolServiceImpl] Exception from AI-vCPU during content creation: " << e.what() << std::endl;
+        response->resulting_text = "";
+        response->error_message = "Exception occurred: ";
+        response->error_message += e.what();
+    } catch (...) {
+        std::cerr << "[AsolServiceImpl] Unknown exception from AI-vCPU during content creation." << std::endl;
+        response->resulting_text = "";
+        response->error_message = "Unknown exception occurred during content creation task.";
+    }
+
+    std::cout << "[AsolServiceImpl] Sending HandleContentCreation response." << std::endl;
+    return grpc::Status::OK;
+}
+
+
 } // namespace asol
 } // namespace dashai_browser
 } // namespace prometheus_ecosystem

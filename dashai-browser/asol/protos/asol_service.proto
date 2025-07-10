@@ -128,6 +128,9 @@ service AsolService {
 
     // Requests a summary of provided page content.
     rpc GetPageSummary(PageSummaryRequest) returns (PageSummaryResponse);
+
+    // Handles various content creation/assistance tasks.
+    rpc HandleContentCreation(ContentCreationRpcRequest) returns (ContentCreationRpcResponse);
 }
 
 // --- Messages for GetPageSummary RPC ---
@@ -155,4 +158,79 @@ message PageSummaryResponse {
     string summary_text = 1;
     string error_message = 2;        // Empty if successful
     map<string, string> metadata = 3; // e.g., {"source_language": "en", "word_count": "150"}
+}
+
+// --- Messages for HandleContentCreation RPC ---
+
+enum WritingAssistanceTypeProto {
+    WRITING_ASSISTANCE_TYPE_UNSPECIFIED = 0;
+    REPHRASE_GENERAL = 1;
+    REPHRASE_CASUAL = 2;
+    REPHRASE_FORMAL = 3;
+    REPHRASE_CONCISE = 4;
+    REPHRASE_EXPAND = 5;
+    CORRECT_GRAMMAR_SPELLING = 6;
+    CHANGE_TONE_FRIENDLY = 7;
+    CHANGE_TONE_PROFESSIONAL = 8;
+    CHANGE_TONE_PERSUASIVE = 9;
+}
+
+message WritingAssistanceOptionsProto {
+    WritingAssistanceTypeProto assistance_type = 1;
+    string original_language = 2; // Optional, e.g., "en-US"
+}
+
+message LanguagePairProto {
+    string source_language = 1; // e.g., "en-US", "auto"
+    string target_language = 2; // e.g., "es-ES"
+}
+
+enum CreativeContentTypeProto {
+    CREATIVE_CONTENT_TYPE_UNSPECIFIED = 0;
+    EMAIL_DRAFT = 1;
+    SOCIAL_MEDIA_POST_TWITTER = 2;
+    SOCIAL_MEDIA_POST_LINKEDIN = 3;
+    BLOG_POST_INTRO = 4;
+    PRODUCT_DESCRIPTION = 5;
+    BRAINSTORM_IDEAS_LIST = 6;
+    SHORT_STORY_SNIPPET = 7;
+    POEM_SNIPPET = 8;
+    HEADLINE_SUGGESTIONS = 9;
+}
+
+message CreativeContentOptionsProto {
+    CreativeContentTypeProto content_type = 1;
+    string topic_or_brief = 2;
+    int32 desired_length_words = 3;
+    string desired_tone = 4; // Optional
+}
+
+message WritingAssistanceRpcRequest {
+    string selected_text = 1;
+    WritingAssistanceOptionsProto options = 2;
+}
+
+message TranslationRpcRequest {
+    string text_to_translate = 1;
+    LanguagePairProto languages = 2;
+}
+
+message CreativeContentRpcRequest {
+    CreativeContentOptionsProto options = 1;
+}
+
+message ContentCreationRpcRequest {
+    oneof request_type {
+        WritingAssistanceRpcRequest writing_assistance = 1;
+        TranslationRpcRequest translation = 2;
+        CreativeContentRpcRequest creative_content = 3;
+    }
+    string user_id = 4;      // Optional
+    string session_id = 5;   // Optional
+}
+
+message ContentCreationRpcResponse {
+    string resulting_text = 1;   // The main output text (rephrased, translated, generated)
+    string error_message = 2;    // Empty if successful
+    map<string, string> metadata = 3; // e.g., language detected, tokens used
 }

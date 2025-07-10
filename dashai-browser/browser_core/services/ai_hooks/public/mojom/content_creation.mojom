@@ -1,0 +1,90 @@
+// Defines interfaces for AI-assisted content creation and interaction features,
+// used for communication between browser UI/logic and the ASOL backend.
+module dashaibrowser.mojom;
+
+// Enum for specifying the type of writing assistance desired.
+enum WritingAssistanceType {
+  REPHRASE_GENERAL, // Generic rephrasing
+  REPHRASE_CASUAL,
+  REPHRASE_FORMAL,
+  REPHRASE_CONCISE, // Make shorter
+  REPHRASE_EXPAND,  // Make longer, add detail
+  CORRECT_GRAMMAR_SPELLING,
+  CHANGE_TONE_FRIENDLY,
+  CHANGE_TONE_PROFESSIONAL,
+  CHANGE_TONE_PERSUASIVE,
+  // ... other specific assistance types like "SIMPLIFY_LANGUAGE"
+};
+
+// Options for writing assistance requests.
+struct WritingAssistanceOptions {
+  WritingAssistanceType assistance_type;
+  // Optional: Original language of the text, e.g., "en-US", "auto"
+  string? original_language;
+  // map<string, string> additional_params; // For future extensions like custom tone
+};
+
+// Specifies source and target languages for translation.
+struct LanguagePair {
+  // ISO 639-1 code, optionally with region, e.g., "en", "en-US", "es", "auto" for auto-detect source
+  string source_language;
+  string target_language; // e.g., "es-ES", "fr-FR"
+};
+
+// Enum for specifying the type of creative content to generate.
+enum CreativeContentType {
+  EMAIL_DRAFT,
+  SOCIAL_MEDIA_POST_TWITTER, // Specific platform targets
+  SOCIAL_MEDIA_POST_LINKEDIN,
+  BLOG_POST_INTRO,
+  PRODUCT_DESCRIPTION,
+  BRAINSTORM_IDEAS_LIST, // For generating a list of ideas
+  SHORT_STORY_SNIPPET,
+  POEM_SNIPPET,
+  HEADLINE_SUGGESTIONS, // For generating multiple headline options
+  // ... other content types
+};
+
+// Options for generating new creative content.
+struct CreativeContentOptions {
+  CreativeContentType content_type;
+  // User's initial input, topic, subject, or a few keywords.
+  string topic_or_brief;
+  // Approximate desired length, e.g., in words or characters. 0 for default.
+  int32 desired_length_words = 0;
+  // Free-text desired tone, e.g., "witty", "serious", "inspirational", "urgent".
+  string? desired_tone;
+  // string target_audience; // e.g., "general", "technical marketing leads"
+  // int32 num_variations_to_generate = 1; // For features like headline suggestions
+  // map<string, string> additional_params; // For more specific context
+};
+
+// Main interface for content creation and AI-powered writing assistance.
+// Implemented by ASOL (or a service it delegates to) and called by browser features.
+interface ContentCreator {
+  // Request for various writing assistance tasks on existing `selected_text`.
+  // `selected_text`: The text that the user wants to modify.
+  // `options`: Specifies the type of assistance (rephrase, correct, change tone, etc.).
+  // Returns:
+  //   `assisted_text`: The modified text.
+  //   `error_message`: An error message if assistance failed, otherwise empty.
+  RequestWritingAssistance(string selected_text, WritingAssistanceOptions options)
+    => (string assisted_text, string error_message);
+
+  // Request for text translation.
+  // `text_to_translate`: The text to be translated.
+  // `languages`: Specifies the source and target languages.
+  // Returns:
+  //   `translated_text`: The translated text.
+  //   `error_message`: An error message if translation failed, otherwise empty.
+  RequestTranslation(string text_to_translate, LanguagePair languages)
+    => (string translated_text, string error_message);
+
+  // Request for generating new creative content based on provided options.
+  // `options`: Specifies the type of content, topic, length, tone, etc.
+  // Returns:
+  //   `generated_content`: The newly generated text content.
+  //   `error_message`: An error message if generation failed, otherwise empty.
+  GenerateCreativeContent(CreativeContentOptions options)
+    => (string generated_content, string error_message);
+};
