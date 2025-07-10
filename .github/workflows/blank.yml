@@ -25,10 +25,11 @@ jobs:
           python-version: '3.9' # Specify a common Python version for linting/formatting (e.g., matching dev env)
           cache: 'pip' # Cache pip dependencies for faster runs
 
-      - name: Install Linting & Formatting Tools
+      - name: Install Linting & Formatting Tools and Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install ruff black  # ruff for linting/formatting, black for strict formatting
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           
       - name: Run Ruff (Linter & Formatter Check)
         # Checks for errors, potential bugs, and style issues, then checks formatting
@@ -59,15 +60,14 @@ jobs:
       - name: Install Project Dependencies & MyPy
         run: |
           python -m pip install --upgrade pip
-          # Install core project dependencies from requirements.txt (if it exists)
-          # pip install -r requirements.txt 
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install mypy # Install MyPy for static type analysis
           # If your project uses specific external libraries, you might need their type stubs:
           # pip install types-requests types-certifi # Example stubs
           
       - name: Run MyPy (Static Type Analysis)
-        # Run MyPy on our core package to catch type inconsistencies
-        run: mypy prometheus_protocol/core/ # Focus on the core logic package
+        # Run MyPy on the entire prometheus_protocol package
+        run: mypy prometheus_protocol/
           
   # Job 3: Comprehensive Unit Tests with Pytest
   test:
@@ -91,8 +91,7 @@ jobs:
       - name: Install Project & Test Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install core project dependencies from requirements.txt (if it exists)
-          # pip install -r requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-cov # Install pytest and pytest-cov for coverage
 
       - name: Run Pytest with Coverage
@@ -124,18 +123,20 @@ jobs:
           python-version: '3.9'
           cache: 'pip'
 
-      - name: Install Security Tools (e.g., Bandit, Safety)
+      - name: Install Security Tools and Dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install bandit safety
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           
       - name: Run Bandit (Python Security Linter)
         # Scans code for common security issues
-        run: bandit -r prometheus_protocol/core/ -ll -f json -o bandit_report.json # Scan core logic, output JSON
+        run: bandit -r prometheus_protocol/ -ll -f json -o bandit_report.json # Scan entire package
         # Example: Add step to upload bandit_report.json as an artifact
           
       - name: Run Safety (Dependency Vulnerability Scanner)
         # Checks installed dependencies against known vulnerability databases
-        run: safety check -r requirements.txt # Assuming requirements.txt
+        run: safety check -r requirements.txt # Now requirements.txt exists
         # If no requirements.txt, you might need to list packages or ensure a virtual env is active
           
   # Job 5: Check Documentation Integrity (for conceptual .md files)

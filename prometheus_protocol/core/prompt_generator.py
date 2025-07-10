@@ -1,7 +1,12 @@
 import yaml
 from jinja2 import Environment, select_autoescape, FileSystemLoader, meta, StrictUndefined
 from jinja2.exceptions import UndefinedError # Import UndefinedError
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
+
+# Import for type hinting, handle potential circularity if modules grow complex
+if TYPE_CHECKING:
+    from .optimization_agent import OptimizationAgent
+    from .optimization_models import OptimizationFeedback
 
 class PromptGeneratorError(ValueError):
     """Custom exception for prompt generation errors."""
@@ -25,7 +30,7 @@ class PromptGenerator:
     defined in YAML with Jinja2 syntax for dynamic content.
     """
 
-    def __init__(self, template_path: str = "./templates"):
+    def __init__(self, template_path: str = "./templates", optimization_agent: Optional['OptimizationAgent'] = None): # Added optimization_agent
         """
         Initializes the PromptGenerator.
 
@@ -34,7 +39,9 @@ class PromptGenerator:
                                  This is used by Jinja2's FileSystemLoader if templates
                                  are stored as separate files and referenced by name.
                                  For direct YAML string loading, this path might be conceptual.
+            optimization_agent (Optional[OptimizationAgent]): An instance of OptimizationAgent.
         """
+        self.optimization_agent = optimization_agent # Store the agent
         self.jinja_env = Environment(
             loader=FileSystemLoader(template_path),
             autoescape=select_autoescape(['html', 'xml'], disabled_extensions=('txt',)),
@@ -247,6 +254,74 @@ class PromptGenerator:
 
         return final_prompt_messages
 
+    def generate_optimized_prompt(
+        self,
+        template_yaml_string: str,
+        dynamic_variables: Dict[str, Any],
+        feedback_history: List['OptimizationFeedback'], # Use string literal for type hint
+        context_modifiers: Optional[Dict[str, Any]] = None,
+        optimization_iterations: int = 5 # Default iterations for optimization
+    ) -> List[Dict[str, str]]:
+        """
+        Generates a prompt, potentially after optimizing the template using the
+        configured OptimizationAgent.
+
+        Args:
+            template_yaml_string (str): The initial/base prompt template YAML string.
+            dynamic_variables (Dict[str, Any]): Variables for prompt generation.
+            feedback_history (List[OptimizationFeedback]): Feedback history for optimization.
+            context_modifiers (Optional[Dict[str, Any]]): Context modifiers for prompt generation.
+            optimization_iterations (int): Number of iterations for the optimization agent.
+
+        Returns:
+            List[Dict[str, str]]: The list of messages for the LLM.
+        """
+        processed_template_yaml = template_yaml_string
+
+        if self.optimization_agent:
+            print(f"PromptGenerator: Optimizing template '{template_yaml_string[:60]}...' using OptimizationAgent.")
+            try:
+                # Ensure OptimizationFeedback is available for type hint if not already globally
+                # from .optimization_models import OptimizationFeedback # Not needed due to TYPE_CHECKING import
+
+                # Runtime type check for feedback_history (optional, as static typing should cover it)
+                # This is more for robustness if type hints are ignored or bypassed.
+                # from .optimization_models import OptimizationFeedback as RuntimeOptimizationFeedback # Avoid name clash if needed
+                # if not all(isinstance(fb, RuntimeOptimizationFeedback) for fb in feedback_history):
+                #      raise TypeError("All items in feedback_history must be of type OptimizationFeedback.")
+
+                optimized_yaml = self.optimization_agent.optimize_prompt( # type: ignore
+                    original_template_yaml=template_yaml_string,
+                    feedback_history=feedback_history,
+                    iterations=optimization_iterations
+                )
+                if optimized_yaml: # Check if optimization returned a valid string
+                    processed_template_yaml = optimized_yaml
+                    print("PromptGenerator: Using optimized template.")
+                else:
+                    print("PromptGenerator: Optimization agent did not return a valid template, using original.")
+            except Exception as e:
+                print(f"PromptGenerator: Error during optimization, using original template. Error: {e}")
+                # Fallback to original template_yaml_string
+
+        # Load the (potentially optimized) template data
+        try:
+            template_data = self.load_prompt_template_from_string(processed_template_yaml)
+        except PromptTemplateValidationError as e:
+            print(f"PromptGenerator: Error loading processed template, falling back to original. Error: {e}")
+            # Fallback to trying the original string again if processed one failed
+            try:
+                template_data = self.load_prompt_template_from_string(template_yaml_string)
+            except PromptTemplateValidationError as e_orig:
+                 raise PromptTemplateValidationError(f"Failed to load both processed and original templates. Original error: {e_orig}") from e_orig
+
+
+        return self.generate_prompt(
+            template_data=template_data,
+            dynamic_variables=dynamic_variables,
+            context_modifiers=context_modifiers
+        )
+
     def get_declared_input_variables(self, template_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Returns the 'input_variables' section from the template data.
@@ -315,7 +390,7 @@ safety_guardrails:
         # print(found_jinja_vars)
 
 
-        print("\n--- Generating prompt (Scenario 1) ---")
+        print("\n--- Generating prompt (Scenario 1 - No Optimization Agent) ---")
         dyn_vars1 = {"user_name": "Alice"}
         ctx_mods1 = {"persona": "cheerful_assistant", "include_weather": False}
         final_prompt1 = generator.generate_prompt(template, dyn_vars1, ctx_mods1)
@@ -342,15 +417,51 @@ safety_guardrails:
         # Modify template to include an undefined variable for testing StrictUndefined
         faulty_template_yaml = sample_template_yaml.replace("Good {{ time_of_day }}!", "Good {{ time_of_day }} and {{ undefined_var }}!") # type: ignore
         try:
-            faulty_template = generator.load_prompt_template_from_string(faulty_template_yaml)
+            faulty_template = generator.load_prompt_template_from_string(faulty_template_yaml) # type: ignore
             generator.generate_prompt(faulty_template, dyn_vars1, ctx_mods1) # type: ignore
-        except (PromptGeneratorError, UndefinedError) as e: # Catch Jinja's UndefinedError too
+        except (PromptGeneratorError, UndefinedError) as e:
             print(f"Error (expected for undefined_var): {e}")
 
 
+        # Example with OptimizationAgent
+        print("\n--- Example with OptimizationAgent ---")
+        try:
+            from prometheus_protocol.core.optimization_agent import OptimizationAgent
+            from prometheus_protocol.core.prompt_mutator import PromptMutator
+            from prometheus_protocol.core.optimization_models import OptimizationFeedback
+            from datetime import datetime, timedelta
+
+            pm = PromptMutator(prompt_generator=generator)
+            oa = OptimizationAgent(prompt_mutator=pm, prompt_generator=generator)
+
+            # Create a new generator instance with the optimization agent
+            opt_generator = PromptGenerator(template_path="templates", optimization_agent=oa)
+
+            history = [
+                OptimizationFeedback(prompt_id="greeting_v1", response_quality_score=0.6, timestamp=datetime.utcnow() - timedelta(days=1)),
+                OptimizationFeedback(prompt_id="greeting_v1", response_quality_score=0.8)
+            ]
+
+            print("\n--- Generating prompt with optimization ---")
+            optimized_messages = opt_generator.generate_optimized_prompt(
+                template_yaml_string=sample_template_yaml, # type: ignore
+                dynamic_variables=dyn_vars1, # type: ignore
+                context_modifiers=ctx_mods1, # type: ignore
+                feedback_history=history
+            )
+            print("Generated Optimized Prompt Messages:")
+            for msg in optimized_messages:
+                print(f"  Role: {msg['role']}, Content: {msg['content']}")
+
+        except ImportError as e:
+            print(f"Could not run optimization example due to import error: {e}")
+        except Exception as e:
+            print(f"An error occurred in optimization example: {e}")
+
+
     except PromptGeneratorError as e:
-        print(f"A PromptGeneratorError occurred: {e}")
+        print(f"A PromptGeneratorError occurred during main examples: {e}")
     except ImportError:
-        print("ImportError: Make sure 'PyYAML' and 'Jinja2' are installed. Run: pip install PyYAML Jinja2")
+        print("ImportError: Make sure 'PyYAML' and 'Jinja2' are installed for base examples. Run: pip install PyYAML Jinja2")
     except Exception as e:
-        print(f"An unexpected error occurred in example: {e}")
+        print(f"An unexpected error occurred in main example: {e}")
