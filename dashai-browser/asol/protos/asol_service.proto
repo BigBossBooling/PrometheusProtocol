@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package prometheus_ecosystem.dashai_browser.asol;
+
+option go_package = "github.com/JosephWK/PrometheusProtocol/dashai-browser/asol/protos;asolpb"; // Example Go package
+option java_package = "com.prometheusecosystem.dashaibrowser.asol.protos";
+option java_multiple_files = true;
+
+// Request to generate or optimize a prompt
+message PromptGenerationRequest {
+    string template_id = 1;                             // ID of a base template to use (optional if original_prompt_text is provided)
+    map<string, string> dynamic_variables = 2;          // Key-value pairs for dynamic content
+    map<string, string> context_modifiers = 3;          // E.g., tone, persona
+    string original_prompt_text = 4;                    // Raw text from user if not using a template, or base for optimization
+    bool apply_optimization = 5;                        // Flag to trigger optimization logic
+    string user_id = 6;                                 // Optional: for user-specific context or history
+    string session_id = 7;                              // Optional: for session-specific context
+}
+
+// Response containing the generated prompt
+message PromptGenerationResponse {
+    string final_prompt_string = 1;                     // The fully constructed prompt to be sent to an LLM
+    string generated_by_template_id = 2;                // The template_id that was used (could be original or an optimized variant ID)
+    string error_message = 3;                           // Error message if generation failed
+    map<string, string> metadata = 4;                   // E.g., version of optimizer used, confidence score
+}
+
+// Request to submit feedback on a prompt interaction
+message PromptFeedbackRequest {
+    string prompt_instance_id = 1;                      // Unique ID for the specific interaction where the prompt was used
+    string template_id_used = 2;                        // The template_id (original or variant) that generated the prompt
+    float response_quality_score = 3;                   // E.g., 0.0 to 1.0, could be from automated eval or user input
+    optional bool task_success_status = 4;              // Did the interaction achieve its goal?
+    optional float user_satisfaction_score = 5;         // E.g., thumbs up/down mapped to a score
+    optional string llm_response_id = 6;                // ID of the LLM's response, for linking
+    optional string user_comment = 7;                   // Free-text feedback from the user
+    string user_id = 8;                                 // Optional: User providing the feedback
+    string session_id = 9;                              // Optional: Session context for the feedback
+}
+
+// Response acknowledging feedback submission
+message PromptFeedbackResponse {
+    bool feedback_acknowledged = 1;
+    optional string message = 2;                        // E.g., "Feedback received, thank you!"
+    optional string feedback_id = 3;                    // ID for the stored feedback record
+}
+
+// ASOL Service Definition
+service AsolService {
+    // Generates/Optimizes a prompt based on the request
+    rpc GenerateOptimizedPrompt(PromptGenerationRequest) returns (PromptGenerationResponse);
+
+    // Submits feedback about a previously generated prompt and its LLM response
+    rpc SubmitPromptFeedback(PromptFeedbackRequest) returns (PromptFeedbackResponse);
+}
