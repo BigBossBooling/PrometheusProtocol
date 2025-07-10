@@ -4,7 +4,8 @@
 #include <iostream>
 #include <sstream> // For string stream formatting
 #include <memory>  // For std::make_unique
-#include "dashai-browser/asol/core/prompt_generator_client.h" // Include the client
+#include "dashai-browser/asol/core/prompt_generator_client.h"
+#include "dashai-browser/asol/core/prompt_feedback_client.h" // Include the feedback client
 
 namespace prometheus_ecosystem {
 namespace dashai_browser {
@@ -16,8 +17,9 @@ grpc::Status grpc::Status::OK = grpc::Status(true);
 
 
 AsolServiceImpl::AsolServiceImpl()
-    : prompt_generator_client_(std::make_unique<core::PromptGeneratorClient>()) {
-    std::cout << "[AsolServiceImpl] Initialized with PromptGeneratorClient." << std::endl;
+    : prompt_generator_client_(std::make_unique<core::PromptGeneratorClient>()),
+      prompt_feedback_client_(std::make_unique<core::PromptFeedbackClient>()) { // Initialize feedback client
+    std::cout << "[AsolServiceImpl] Initialized with PromptGeneratorClient and PromptFeedbackClient." << std::endl;
 }
 
 AsolServiceImpl::~AsolServiceImpl() {}
@@ -83,32 +85,47 @@ grpc::Status AsolServiceImpl::SubmitPromptFeedback(
     const ConceptualPromptFeedbackRequest* request,
     ConceptualPromptFeedbackResponse* response) {
 
-    // Log the request (conceptual)
     std::cout << "[AsolServiceImpl] Received SubmitPromptFeedback request." << std::endl;
-    if (request) {
-        std::cout << "  Prompt Instance ID: " << request->prompt_instance_id << std::endl;
-        std::cout << "  Template ID Used: " << request->template_id_used << std::endl;
-        std::cout << "  Response Quality Score: " << request->response_quality_score << std::endl;
-        std::cout << "  Task Success: " << (request->task_success_status ? "true" : "false") << std::endl; // Assuming default false if not set
-        if (!request->user_comment.empty()) {
-            std::cout << "  User Comment: " << request->user_comment << std::endl;
+    if (!request || !response) {
+        std::cerr << "[AsolServiceImpl] Error: FeedbackRequest or FeedbackResponse object is null." << std::endl;
+        if (response) {
+            response->feedback_acknowledged = false;
+            response->message = "Internal error: request or response pointer was null.";
         }
+        return grpc::Status::OK; // Or conceptual error
     }
 
-    // This is where ASOL would forward the feedback to Prometheus Protocol's FeedbackCollector
-    // or a similar feedback aggregation service.
-    // For this stub, we just acknowledge.
+    std::cout << "  Prompt Instance ID: " << request->prompt_instance_id << std::endl;
+    std::cout << "  Response Quality Score: " << request->response_quality_score << std::endl;
 
-    if (response) {
-        response->feedback_acknowledged = true;
-        response->message = "Feedback conceptually received by ASOL stub.";
-        // Generate a dummy feedback ID
-        std::stringstream ss;
-        ss << "fb_stub_" << std::chrono::system_clock::now().time_since_epoch().count();
-        response->feedback_id = ss.str();
+    // Call the PromptFeedbackClient
+    core::ConceptualPromptFeedbackResponse client_response;
+    try {
+        client_response = prompt_feedback_client_->Submit(*request);
+
+        // Populate the RPC response from the client's response
+        response->feedback_acknowledged = client_response.feedback_acknowledged;
+        response->message = client_response.message;
+        response->feedback_id = client_response.feedback_id;
+
+        if (!client_response.feedback_acknowledged) {
+            std::cout << "[AsolServiceImpl] PromptFeedbackClient indicated feedback was not acknowledged (or error)." << std::endl;
+        }
+
+    } catch (const std::exception& e) {
+        std::cerr << "[AsolServiceImpl] Exception from PromptFeedbackClient: " << e.what() << std::endl;
+        response->feedback_acknowledged = false;
+        response->message = "Exception occurred while calling PromptFeedbackClient: ";
+        response->message += e.what();
+        return grpc::Status::OK; // Conceptual: error passed in message
+    } catch (...) {
+        std::cerr << "[AsolServiceImpl] Unknown exception from PromptFeedbackClient." << std::endl;
+        response->feedback_acknowledged = false;
+        response->message = "Unknown exception occurred while calling PromptFeedbackClient.";
+        return grpc::Status::OK; // Conceptual: error passed in message
     }
 
-    std::cout << "[AsolServiceImpl] Sending dummy SubmitPromptFeedback response." << std::endl;
+    std::cout << "[AsolServiceImpl] Sending SubmitPromptFeedback response." << std::endl;
     return grpc::Status::OK;
 }
 

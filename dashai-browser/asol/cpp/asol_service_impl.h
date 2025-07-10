@@ -23,9 +23,10 @@ namespace asol {
 // class PromptFeedbackRequest;
 // class PromptFeedbackResponse;
 
-// Forward declare client
+// Forward declare clients
 namespace core {
     class PromptGeneratorClient;
+    class PromptFeedbackClient; // Added
 }
 
 // Simplified structures for stubbing if full .pb.h is not used/generated in this step.
@@ -106,6 +107,7 @@ public:
 
 private:
     std::unique_ptr<core::PromptGeneratorClient> prompt_generator_client_;
+    std::unique_ptr<core::PromptFeedbackClient> prompt_feedback_client_; // Added
 };
 
 } // namespace asol
