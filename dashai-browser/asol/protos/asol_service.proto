@@ -123,4 +123,36 @@ service AsolService {
 
     // Generic RPC to get AI-vCPU status via ASOL
     rpc GetVCPUStatus(VCPUStatusRequest) returns (VCPUStatusResponse);
+
+    // --- Specific Feature RPCs that might use AiTaskRequests internally ---
+
+    // Requests a summary of provided page content.
+    rpc GetPageSummary(PageSummaryRequest) returns (PageSummaryResponse);
+}
+
+// --- Messages for GetPageSummary RPC ---
+
+// Re-using SummaryLengthPreference from AiTaskRequest context, or define locally
+// For simplicity, assume client (browser Mojo caller) uses a similar enum and ASOL translates.
+// Or, define it here if this proto is the sole source of truth for this RPC.
+// Let's define it here for clarity of this service contract.
+enum PageSummaryLengthPreference {
+    PAGE_SUMMARY_LENGTH_DEFAULT = 0;
+    PAGE_SUMMARY_LENGTH_SHORT = 1;
+    PAGE_SUMMARY_LENGTH_MEDIUM = 2;
+    PAGE_SUMMARY_LENGTH_DETAILED = 3;
+}
+
+message PageSummaryRequest {
+    string page_content_to_summarize = 1;
+    PageSummaryLengthPreference length_preference = 2;
+    map<string, string> options = 3; // e.g., {"target_audience": "technical"}
+    string user_id = 4;              // Optional
+    string session_id = 5;           // Optional
+}
+
+message PageSummaryResponse {
+    string summary_text = 1;
+    string error_message = 2;        // Empty if successful
+    map<string, string> metadata = 3; // e.g., {"source_language": "en", "word_count": "150"}
 }

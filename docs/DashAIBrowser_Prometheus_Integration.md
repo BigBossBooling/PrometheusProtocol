@@ -140,3 +140,92 @@ This scenario outlines the data flow from DashAIBrowser to ASOL (and conceptuall
     *   Frontend receives acknowledgment. UI might show a small "Feedback sent" notification.
 
 This scenario validates the defined gRPC interface and the basic request/response flow between DashAIBrowser and a conceptual ASOL backend that interfaces with Prometheus Protocol. The stubs allow for frontend development and testing of the UI/UX elements even before the full Prometheus Protocol backend is connected to ASOL.
+
+## IV. Feature: AI-Powered Summarization & Content Digest
+
+This section details the UI/UX for an on-demand content summarization feature, leveraging ASOL and the conceptual EchoSphere AI-vCPU.
+
+### A. Activation Points & UI
+
+1.  **"Sparkle" Icon in Address Bar (Omnibox):**
+    *   A discreet "✨" (Sparkle) icon appears in the address bar when a page with summarizable content is loaded (e.g., articles, long documents).
+    *   **Interaction:**
+        *   Clicking the Sparkle icon opens a small popover/dropdown directly beneath it.
+        *   The popover shows:
+            *   "Generate Summary" button.
+            *   Options for summary length: "Short," "Medium," "Detailed" (maps to `SummaryLengthPreference`). Default could be "Medium."
+            *   A "Settings" cog for advanced options (e.g., target audience - conceptual for later).
+    *   **Alternative:** The icon could directly trigger a "Medium" summary, with options available post-generation.
+
+2.  **Context Menu Integration:**
+    *   **Page Summary:** Right-clicking anywhere on a webpage shows a "DashAI: Summarize Page" option.
+    *   **Selected Text Summary:** If text is selected on the page, right-clicking shows "DashAI: Summarize Selected Text."
+    *   **Interaction:** Selecting these options could either:
+        *   Immediately generate a summary with default options and display it (see Display Methods).
+        *   Open the same Sparkle icon popover with pre-filled context (page vs. selection).
+
+3.  **Dedicated "Digest" Panel/Sidebar:**
+    *   A toggleable sidebar or a dedicated panel (perhaps part of a larger "AI Tools" panel).
+    *   **Content:**
+        *   "Summarize Current Page" button.
+        *   If text is selected on the page: "Summarize Selection" button appears.
+        *   Input field: "Summarize specific URL or text..." (user can paste content).
+        *   Display area for the generated summary.
+        *   History of recent summaries.
+        *   Controls for summary length and other options.
+
+### B. Summary Display Methods
+
+1.  **Popover/Notification:**
+    *   For quick summaries (e.g., triggered from address bar icon with default settings).
+    *   A non-intrusive popover or a rich notification displays the summary.
+    *   Actions: "Copy Summary," "View Full Digest" (opens the Digest Panel), "Refine" (opens options to regenerate).
+
+2.  **Digest Panel/Sidebar:**
+    *   The primary display area for summaries, especially detailed ones or when multiple summaries are generated.
+    *   Displays the summary text.
+    *   Source indication (e.g., "Summary of [Page Title/URL/Selection Snippet]").
+    *   Actions: "Copy," "Save to Notes," "Share," "Regenerate with different options."
+    *   Feedback mechanism (thumbs up/down, rating) for the summary quality.
+
+### C. Interaction Flow Example (Address Bar Icon)
+
+1.  User loads an article page. The "✨" icon appears in the address bar.
+2.  User clicks the "✨" icon.
+3.  A small popover appears:
+    *   Title: "AI Page Digest"
+    *   Buttons: "Short Summary" | "Medium Summary" | "Detailed Summary"
+    *   (Optional) Cog icon for "More Options."
+4.  User clicks "Medium Summary."
+    *   **Browser-Side Action (Conceptual `SummaryService`):**
+        *   A browser component (e.g., an action handler for the UI) gets the current page's main content (e.g., using a conceptual `PageContentExtractor`).
+        *   It calls `SummaryService::GetSummary(page_content, {length_preference: MEDIUM}, callback)`.
+    *   **Mojo IPC (Browser to ASOL):**
+        *   `SummaryService` uses its Mojo remote to call `ContentAnalyzer::RequestSummary(page_content, options)` which crosses the process boundary to ASOL.
+    *   **ASOL - Mojo Service Implementation (`ContentAnalyzerImpl` - Conceptual):**
+        *   The `ContentAnalyzerImpl::RequestSummary` method in ASOL is invoked.
+        *   It constructs a `PageSummaryRequest` gRPC message (if calling its own gRPC service) or directly constructs an `AiTaskRequest`.
+        *   **Decision from plan:** ASOL's `GetPageSummary` gRPC service will be called. So, `ContentAnalyzerImpl` makes a local gRPC call to `AsolServiceImpl::GetPageSummary`.
+    *   **ASOL - `AsolServiceImpl::GetPageSummary` (gRPC method):**
+        *   Receives `PageSummaryRequest`.
+        *   Constructs `core::ConceptualAiTaskRequest` with `task_type: "SUMMARIZE_TEXT"`, `input_data` containing `page_content` and `length_preference`.
+        *   Calls `vcpu_interface_->SubmitTask(ai_task_request)`.
+    *   **EchoSphere AI-vCPU (Mocked):**
+        *   The `MockEchoSphereVCPU::SubmitTask` is called.
+        *   It's configured for this test to expect a "SUMMARIZE_TEXT" task.
+        *   It returns a predefined `core::ConceptualAiTaskResponse` with `success: true` and `output_data["summary_text"] = "This is a mocked summary of the page content."`.
+    *   **ASOL - `AsolServiceImpl::GetPageSummary` (Response Handling):**
+        *   Receives the `AiTaskResponse` from the vCPU.
+        *   Extracts the summary and populates a `ConceptualPageSummaryResponse` (gRPC response type).
+        *   Returns this to its caller (`ContentAnalyzerImpl`).
+    *   **ASOL - Mojo Service Implementation (`ContentAnalyzerImpl` - Callback):**
+        *   Receives the `PageSummaryResponse`.
+        *   Invokes the Mojo callback provided by `SummaryService` with `(summary_text, error_message)`.
+    *   **Browser-Side Action (`SummaryService` Callback):**
+        *   The callback in `SummaryService` is executed.
+        *   It receives "This is a mocked summary of the page content." and an empty error string.
+7.  **Displaying the Summary:**
+        *   `SummaryService` (or its caller) updates the browser UI (e.g., Digest Panel, popover) with the received summary.
+    *   **Feedback (Separate Flow):** User can provide feedback on the summary, triggering the `SubmitPromptFeedback` flow detailed previously.
+
+This detailed scenario validates the entire conceptual pipeline from browser UI interaction, through Mojo IPC, ASOL's gRPC service handling, delegation to the (mocked) AI-vCPU, and the response path back to the UI.

@@ -1,0 +1,44 @@
+// Defines interfaces for content analysis features provided by AI hooks,
+// primarily used for communication between browser UI/logic and the ASOL backend.
+module dashaibrowser.mojom;
+
+// Enum to specify the desired length or style of a summary.
+enum SummaryLengthPreference {
+  // The AI should determine the most appropriate length based on content.
+  DEFAULT,
+  // A very short, gist-like summary (e.g., 1-2 sentences, headline).
+  SHORT,
+  // A moderate length summary (e.g., a paragraph).
+  MEDIUM,
+  // A more detailed and comprehensive summary.
+  DETAILED,
+};
+
+// Options for requesting a summary.
+struct SummaryOptions {
+  SummaryLengthPreference length_preference = SummaryLengthPreference.DEFAULT;
+
+  // Future potential options:
+  // string target_audience; // e.g., "general", "technical", "child"
+  // string output_format;   // e.g., "paragraph", "bullet_points"
+  // string language_code;   // e.g., "en-US", "es-ES" (for summarization in a specific language)
+};
+
+// Interface for content analysis services, such as text summarization.
+// This interface would be implemented by a component in the ASOL (or browser process
+// that has access to ASOL) and called by UI features in the renderer process.
+interface ContentAnalyzer {
+  // Requests a summary of the provided text content.
+  // `page_content`: The text content to be summarized. This could be
+  //                 the full text of a webpage, a user's text selection, etc.
+  // `options`: Configuration for how the summary should be generated.
+  // Returns:
+  //   `summary_text`: The generated summary.
+  //   `error_message`: An error message if summarization failed, otherwise empty.
+  RequestSummary(string page_content, SummaryOptions options) => (string summary_text, string error_message);
+
+  // Future potential methods:
+  // ExtractKeywords(string content, uint32 max_keywords) => (array<string> keywords, string error_message);
+  // DetectLanguage(string content) => (string language_code, float confidence, string error_message);
+  // SentimentAnalysis(string content) => (float score, string label, string error_message);
+};

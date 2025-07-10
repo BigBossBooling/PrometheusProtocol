@@ -128,8 +128,31 @@ public:
 private:
     std::unique_ptr<core::PromptGeneratorClient> prompt_generator_client_;
     std::unique_ptr<core::PromptFeedbackClient> prompt_feedback_client_;
-    std::unique_ptr<core::EchoSphereVCPUInterface> vcpu_interface_; // Added
+    std::unique_ptr<core::EchoSphereVCPUInterface> vcpu_interface_;
 };
+
+// --- Conceptual C++ structs for new GetPageSummary RPC (mirroring .proto) ---
+enum class ConceptualPageSummaryLengthPreference {
+    DEFAULT = 0,
+    SHORT = 1,
+    MEDIUM = 2,
+    DETAILED = 3
+};
+
+struct ConceptualPageSummaryRequest {
+    std::string page_content_to_summarize;
+    ConceptualPageSummaryLengthPreference length_preference = ConceptualPageSummaryLengthPreference::DEFAULT;
+    std::map<std::string, std::string> options;
+    std::string user_id;
+    std::string session_id;
+};
+
+struct ConceptualPageSummaryResponse {
+    std::string summary_text;
+    std::string error_message;
+    std::map<std::string, std::string> metadata;
+};
+// --- End conceptual structs for GetPageSummary ---
 
 } // namespace asol
 } // namespace dashai_browser
