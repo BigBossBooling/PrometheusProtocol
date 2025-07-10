@@ -23,6 +23,11 @@ namespace asol {
 // class PromptFeedbackRequest;
 // class PromptFeedbackResponse;
 
+// Forward declare client
+namespace core {
+    class PromptGeneratorClient;
+}
+
 // Simplified structures for stubbing if full .pb.h is not used/generated in this step.
 // These should ideally match the structure in the .proto file.
 struct ConceptualPromptGenerationRequest {
@@ -85,7 +90,7 @@ namespace grpc {
 // For conceptual stubs, we define methods with simplified request/response types.
 class AsolServiceImpl {
 public:
-    AsolServiceImpl();
+    AsolServiceImpl(); // Updated to initialize client
     ~AsolServiceImpl();
 
     // Conceptual RPC method stubs
@@ -98,6 +103,9 @@ public:
         grpc::ServerContext* context,
         const ConceptualPromptFeedbackRequest* request,
         ConceptualPromptFeedbackResponse* response);
+
+private:
+    std::unique_ptr<core::PromptGeneratorClient> prompt_generator_client_;
 };
 
 } // namespace asol

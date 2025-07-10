@@ -3,6 +3,8 @@
 // For conceptual logging. In a real system, use a proper logging library.
 #include <iostream>
 #include <sstream> // For string stream formatting
+#include <memory>  // For std::make_unique
+#include "dashai-browser/asol/core/prompt_generator_client.h" // Include the client
 
 namespace prometheus_ecosystem {
 namespace dashai_browser {
@@ -13,7 +15,11 @@ namespace asol {
 grpc::Status grpc::Status::OK = grpc::Status(true);
 
 
-AsolServiceImpl::AsolServiceImpl() {}
+AsolServiceImpl::AsolServiceImpl()
+    : prompt_generator_client_(std::make_unique<core::PromptGeneratorClient>()) {
+    std::cout << "[AsolServiceImpl] Initialized with PromptGeneratorClient." << std::endl;
+}
+
 AsolServiceImpl::~AsolServiceImpl() {}
 
 grpc::Status AsolServiceImpl::GenerateOptimizedPrompt(
@@ -21,43 +27,54 @@ grpc::Status AsolServiceImpl::GenerateOptimizedPrompt(
     const ConceptualPromptGenerationRequest* request,
     ConceptualPromptGenerationResponse* response) {
 
-    // Log the request (conceptual)
     std::cout << "[AsolServiceImpl] Received GenerateOptimizedPrompt request." << std::endl;
-    if (request) {
-        std::cout << "  Template ID: " << (request->template_id.empty() ? "[not set]" : request->template_id) << std::endl;
-        std::cout << "  Original Prompt Text: " << (request->original_prompt_text.empty() ? "[not set]" : request->original_prompt_text) << std::endl;
-        std::cout << "  Apply Optimization: " << (request->apply_optimization ? "true" : "false") << std::endl;
-        std::cout << "  Dynamic Variables count: " << request->dynamic_variables.size() << std::endl;
-        for(const auto& pair : request->dynamic_variables) {
-            std::cout << "    Var: " << pair.first << " = " << pair.second << std::endl;
+    if (!request || !response) {
+        std::cerr << "[AsolServiceImpl] Error: Request or Response object is null." << std::endl;
+        // In real gRPC, you'd return a specific error status like INVALID_ARGUMENT
+        // For this conceptual stub, we might just indicate error in the response if possible,
+        // or rely on the fact that gRPC framework handles nulls before this point.
+        // However, for robustness in the stub:
+        if (response) {
+            response->error_message = "Internal error: request or response pointer was null.";
         }
-        std::cout << "  Context Modifiers count: " << request->context_modifiers.size() << std::endl;
-         for(const auto& pair : request->context_modifiers) {
-            std::cout << "    Mod: " << pair.first << " = " << pair.second << std::endl;
-        }
+        // This conceptual status doesn't have an INTERNAL or INVALID_ARGUMENT, returning OK
+        // but the error_message in response should be checked by client.
+        return grpc::Status::OK; // Or a conceptual error status if defined
     }
 
-    // This is where ASOL would typically make a call to the Prometheus Protocol backend/service.
-    // For this stub, we craft a dummy response.
+    std::cout << "  Template ID: " << (request->template_id.empty() ? "[not set]" : request->template_id) << std::endl;
+    std::cout << "  Apply Optimization: " << (request->apply_optimization ? "true" : "false") << std::endl;
 
-    if (response) {
-        response->final_prompt_string = "Hello";
-        if (request && request->dynamic_variables.count("customer_name")) {
-             response->final_prompt_string += " " + request->dynamic_variables.at("customer_name");
-        } else if (request && request->dynamic_variables.count("user_name")) {
-             response->final_prompt_string += " " + request->dynamic_variables.at("user_name");
-        } else {
-            response->final_prompt_string += " User";
+    // Call the PromptGeneratorClient
+    core::ConceptualPromptGenerationResponse client_response;
+    try {
+        client_response = prompt_generator_client_->Generate(*request);
+
+        // Populate the RPC response from the client's response
+        response->final_prompt_string = client_response.final_prompt_string;
+        response->generated_by_template_id = client_response.generated_by_template_id;
+        response->error_message = client_response.error_message;
+        response->metadata = client_response.metadata;
+
+        if (!client_response.error_message.empty()) {
+            std::cout << "[AsolServiceImpl] PromptGeneratorClient returned an error: " << client_response.error_message << std::endl;
+            // No specific gRPC error status to return here in stub, error is in message.
         }
-        response->final_prompt_string += "! This is a conceptual stub response from ASOL. Optimization was ";
-        response->final_prompt_string += (request && request->apply_optimization) ? "conceptually applied." : "not applied.";
 
-        response->generated_by_template_id = request ? (request->template_id.empty() ? "optimized_from_text" : request->template_id + "_stub_optimized") : "unknown_stub";
-        response->error_message = ""; // No error for stub
-        response->metadata["asol_stub_version"] = "1.0.0";
+    } catch (const std::exception& e) {
+        std::cerr << "[AsolServiceImpl] Exception from PromptGeneratorClient: " << e.what() << std::endl;
+        response->error_message = "Exception occurred while calling PromptGeneratorClient: ";
+        response->error_message += e.what();
+        // return grpc::Status(grpc::StatusCode::INTERNAL, response->error_message); // If real gRPC
+        return grpc::Status::OK; // Conceptual: error passed in message
+    } catch (...) {
+        std::cerr << "[AsolServiceImpl] Unknown exception from PromptGeneratorClient." << std::endl;
+        response->error_message = "Unknown exception occurred while calling PromptGeneratorClient.";
+        // return grpc::Status(grpc::StatusCode::INTERNAL, response->error_message); // If real gRPC
+        return grpc::Status::OK; // Conceptual: error passed in message
     }
 
-    std::cout << "[AsolServiceImpl] Sending dummy GenerateOptimizedPrompt response." << std::endl;
+    std::cout << "[AsolServiceImpl] Sending GenerateOptimizedPrompt response." << std::endl;
     return grpc::Status::OK;
 }
 
