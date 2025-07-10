@@ -23,10 +23,11 @@ namespace asol {
 // class PromptFeedbackRequest;
 // class PromptFeedbackResponse;
 
-// Forward declare clients
+// Forward declare clients and interfaces
 namespace core {
     class PromptGeneratorClient;
-    class PromptFeedbackClient; // Added
+    class PromptFeedbackClient;
+    class EchoSphereVCPUInterface; // Added
 }
 
 // Simplified structures for stubbing if full .pb.h is not used/generated in this step.
@@ -91,10 +92,18 @@ namespace grpc {
 // For conceptual stubs, we define methods with simplified request/response types.
 class AsolServiceImpl {
 public:
-    AsolServiceImpl(); // Updated to initialize client
+    AsolServiceImpl();
+    // Constructor for injecting mock/specific vCPU interface (primarily for testing)
+    explicit AsolServiceImpl(std::unique_ptr<core::EchoSphereVCPUInterface> vcpu_interface);
+    // Overloaded constructor to also inject other clients if needed for testing them independently
+    AsolServiceImpl(
+        std::unique_ptr<core::PromptGeneratorClient> prompt_gen_client,
+        std::unique_ptr<core::PromptFeedbackClient> prompt_fb_client,
+        std::unique_ptr<core::EchoSphereVCPUInterface> vcpu_interface);
+
     ~AsolServiceImpl();
 
-    // Conceptual RPC method stubs
+    // Existing RPC method stubs, will be updated to use vCPU interface
     grpc::Status GenerateOptimizedPrompt(
         grpc::ServerContext* context,
         const ConceptualPromptGenerationRequest* request,
@@ -105,9 +114,21 @@ public:
         const ConceptualPromptFeedbackRequest* request,
         ConceptualPromptFeedbackResponse* response);
 
+    // New RPC method stubs for direct AI-vCPU interaction via ASOL
+    grpc::Status SubmitAiTask(
+        grpc::ServerContext* context,
+        const ConceptualAiTaskRequest* request, // Using conceptual C++ struct directly
+        ConceptualAiTaskResponse* response);
+
+    grpc::Status GetVCPUStatus(
+        grpc::ServerContext* context,
+        const ConceptualVCPUStatusRequest* request, // Using conceptual C++ struct directly
+        ConceptualVCPUStatusResponse* response);
+
 private:
     std::unique_ptr<core::PromptGeneratorClient> prompt_generator_client_;
-    std::unique_ptr<core::PromptFeedbackClient> prompt_feedback_client_; // Added
+    std::unique_ptr<core::PromptFeedbackClient> prompt_feedback_client_;
+    std::unique_ptr<core::EchoSphereVCPUInterface> vcpu_interface_; // Added
 };
 
 } // namespace asol

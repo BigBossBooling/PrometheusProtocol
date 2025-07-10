@@ -45,11 +45,82 @@ message PromptFeedbackResponse {
     optional string feedback_id = 3;                    // ID for the stored feedback record
 }
 
+
+// --- EchoSphere AI-vCPU Interaction Messages ---
+
+// Enum for specifying which type of AI core specialization is preferred or required
+enum AiCoreSpecialization {
+    CORE_UNSPECIFIED = 0;
+    CONTROL_CORE = 1;         // For overall orchestration, task management, complex logic
+    LANGUAGE_MODELER = 2;     // For text generation, understanding, summarization, translation
+    CREATIVE_GENERATOR = 3;   // For novel content, image generation hints, artistic tasks
+    LOGIC_PROCESSOR = 4;      // For reasoning, problem-solving, data analysis
+    PRIVACY_GUARDIAN = 5;     // For ensuring data handling aligns with Privacy Protocol
+    FUSION_CORE = 6;          // For multimodal data integration
+    VISION_INTERPRETER = 7;   // For image/video analysis
+    KNOWLEDGE_NAVIGATOR = 8;  // For information retrieval, knowledge graph traversal
+    RL_TRAINER = 9;           // For reinforcement learning tasks, agent training
+    NEUROPLASTICITY_ENGINE = 10; // For model adaptation, learning new patterns
+}
+
+// Request to submit a task to the EchoSphere AI-vCPU
+message AiTaskRequest {
+    string task_id = 1;                                 // Unique ID for tracking this specific task instance
+    string task_type = 2;                               // High-level type of task, e.g., "SUMMARIZE_TEXT", "GENERATE_PROMPT_VARIANT", "ANALYZE_FEEDBACK"
+    map<string, string> input_data = 3;                 // Flexible key-value input. Values can be JSON strings for complex data.
+                                                        // E.g., {"text_to_summarize": "...", "max_length": "100"}
+                                                        // E.g., {"base_template_yaml": "...", "feedback_json": "..."}
+    AiCoreSpecialization required_specialization = 4;   // Hint for preferred core or strict requirement
+    int32 priority = 5;                                 // Optional task priority (e.g., 0 = normal, higher = more urgent)
+    string user_id = 6;                                 // Optional: User context for the task
+    string session_id = 7;                              // Optional: Session context for the task
+}
+
+// Response from the EchoSphere AI-vCPU after processing a task
+message AiTaskResponse {
+    string task_id = 1;                                 // Corresponds to the AiTaskRequest.task_id
+    bool success = 2;                                   // Was the task processed successfully by the AI-vCPU?
+    map<string, string> output_data = 3;                // Flexible key-value output. Values can be JSON strings.
+                                                        // E.g., {"summary": "...", "prompt_variant_yaml": "..."}
+    string processed_by_core_id = 4;                    // Conceptual ID/name of the AI-vCPU core that handled the task
+    string error_message = 5;                           // Error message if success is false
+    map<string, string> performance_metrics = 6;        // E.g., {"processing_time_ms": "120", "tokens_used": "500"}
+}
+
+// Request to get the status of the EchoSphere AI-vCPU
+message VCPUStatusRequest {
+    // Could include specific core IDs to query, or be empty for general status
+    repeated string core_ids_filter = 1;
+}
+
+// Response containing the status of the EchoSphere AI-vCPU
+message VCPUStatusResponse {
+    string overall_status = 1;                          // E.g., "OPERATIONAL", "DEGRADED", "INITIALIZING"
+    message CoreStatus {
+        string core_id = 1;
+        string status = 2;                              // E.g., "IDLE", "PROCESSING", "ERROR"
+        int32 current_load_percentage = 3;              // 0-100
+        int32 pending_tasks_on_core = 4;
+    }
+    repeated CoreStatus core_statuses = 2;              // Status for each (or filtered) specialized core
+    int32 total_pending_tasks = 3;                      // Total tasks pending across all cores
+    map<string, string> vcpu_metadata = 4;              // E.g., version, uptime
+}
+
+
 // ASOL Service Definition
 service AsolService {
     // Generates/Optimizes a prompt based on the request
+    // This might internally create an AiTaskRequest for the vCPU
     rpc GenerateOptimizedPrompt(PromptGenerationRequest) returns (PromptGenerationResponse);
 
     // Submits feedback about a previously generated prompt and its LLM response
+    // This might internally create an AiTaskRequest for the vCPU
     rpc SubmitPromptFeedback(PromptFeedbackRequest) returns (PromptFeedbackResponse);
+
+    // Generic RPC to submit a task directly to the AI-vCPU via ASOL
+    rpc SubmitAiTask(AiTaskRequest) returns (AiTaskResponse);
+
+    // Generic RPC to get AI-vCPU status via ASOL
+    rpc GetVCPUStatus(VCPUStatusRequest) returns (VCPUStatusResponse);
 }
