@@ -494,6 +494,209 @@ grpc::Status AsolServiceImpl::HandleContentCreation(
 }
 
 
+// --- Implementations for AI-Enhanced Search & Discovery RPCs ---
+
+grpc::Status AsolServiceImpl::HandleContextualSearch(
+    grpc::ServerContext* context,
+    const ConceptualContextualSearchRpcRequest* request,
+    ConceptualSearchResponseProto* response) {
+
+    std::cout << "[AsolServiceImpl] Received HandleContextualSearch request. Query: " << (request ? request->query : "null") << std::endl;
+    if (!request || !response) {
+        std::cerr << "[AsolServiceImpl] Error: ContextualSearchRpcRequest or Response object is null." << std::endl;
+        if(response) response->error_message = "Request or Response object is null.";
+        return grpc::Status::OK;
+    }
+
+    core::ConceptualAiTaskRequest ai_task_request;
+    ai_task_request.task_id = "asol_contextual_search_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+    ai_task_request.task_type = "CONTEXTUAL_SEARCH";
+    ai_task_request.required_specialization = core::ConceptualAiCoreSpecialization::LANGUAGE_MODELER; // Could also involve MEMORY_CORE
+
+    ai_task_request.input_data["query"] = request->query;
+    if (!request->current_page_content_summary.empty()) {
+        ai_task_request.input_data["current_page_context_summary"] = request->current_page_content_summary;
+    }
+    ai_task_request.input_data["include_history"] = request->options.include_history ? "true" : "false";
+    ai_task_request.input_data["include_bookmarks"] = request->options.include_bookmarks ? "true" : "false";
+    if (!request->options.current_page_url.empty()) {
+        ai_task_request.input_data["current_page_url"] = request->options.current_page_url;
+    }
+    ai_task_request.input_data["max_results"] = std::to_string(request->options.max_results);
+    if (!request->user_id.empty()) ai_task_request.user_id = request->user_id;
+
+
+    try {
+        core::ConceptualAiTaskResponse vcpu_response = vcpu_interface_->SubmitTask(ai_task_request);
+        if (vcpu_response.success) {
+            // Assuming vCPU output_data["results_json"] is a JSON string array of SearchResultItemProto-like objects
+            // This parsing is conceptual. A real implementation would use a JSON library or structured data.
+            if (vcpu_response.output_data.count("results_json")) {
+                std::cout << "  Conceptual parsing of results_json from vCPU..." << std::endl;
+                // For stub, let's just create one dummy result if the vCPU stub doesn't provide it directly
+                ConceptualSearchResultItemProto item;
+                item.url = vcpu_response.output_data.count("result_url_0") ? vcpu_response.output_data.at("result_url_0") :"http://example.com/vcpu_search_result";
+                item.title = vcpu_response.output_data.count("result_title_0") ? vcpu_response.output_data.at("result_title_0") : "vCPU Search Result for " + request->query;
+                item.snippet = vcpu_response.output_data.count("result_snippet_0") ? vcpu_response.output_data.at("result_snippet_0") : "Content from vCPU based on search.";
+                item.relevance_score = vcpu_response.output_data.count("result_score_0") ? std::stod(vcpu_response.output_data.at("result_score_0")) : 0.85;
+                item.source_type = vcpu_response.output_data.count("result_source_0") ? vcpu_response.output_data.at("result_source_0") : "vcpu_web";
+                response->results.push_back(item);
+            } else if (vcpu_response.output_data.count("dummy_search_result_title")) { // from StubEchoSphereVCPU
+                 ConceptualSearchResultItemProto item;
+                 item.title = vcpu_response.output_data.at("dummy_search_result_title");
+                 item.url = "http://example.com/stub_vcpu_search";
+                 item.snippet = "Stubbed vCPU search result for query: " + request->query;
+                 response->results.push_back(item);
+            }
+            if (vcpu_response.output_data.count("suggested_query_correction")) {
+                response->suggested_query_correction = vcpu_response.output_data.at("suggested_query_correction");
+            }
+            response->error_message = "";
+        } else {
+            response->error_message = "AI-vCPU contextual search task failed: " + vcpu_response.error_message;
+        }
+    } catch (const std::exception& e) {
+        response->error_message = "Exception during contextual search: " + std::string(e.what());
+    }
+    return grpc::Status::OK;
+}
+
+grpc::Status AsolServiceImpl::HandleMultimodalSearch(
+    grpc::ServerContext* context,
+    const ConceptualMultimodalSearchRpcRequest* request,
+    ConceptualSearchResponseProto* response) {
+
+    std::cout << "[AsolServiceImpl] Received HandleMultimodalSearch request. Image data size: " << (request ? request->image_data.size() : 0) << std::endl;
+    if (!request || !response) {
+        if(response) response->error_message = "Request or Response object is null.";
+        return grpc::Status::OK;
+    }
+
+    core::ConceptualAiTaskRequest ai_task_request;
+    ai_task_request.task_id = "asol_multimodal_search_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+    ai_task_request.task_type = "MULTIMODAL_SEARCH";
+    ai_task_request.required_specialization = core::ConceptualAiCoreSpecialization::VISION_INTERPRETER;
+
+    // image_data would need to be base64 encoded or handled as raw bytes if input_data supported it.
+    // For map<string, string>, base64 is typical.
+    ai_task_request.input_data["image_data_size"] = std::to_string(request->image_data.size()); // Placeholder
+    if(!request->textual_context.empty()) ai_task_request.input_data["textual_context"] = request->textual_context;
+    // ... map other options ...
+    if (!request->user_id.empty()) ai_task_request.user_id = request->user_id;
+
+    try {
+        core::ConceptualAiTaskResponse vcpu_response = vcpu_interface_->SubmitTask(ai_task_request);
+        if (vcpu_response.success) {
+            // Similar conceptual parsing of results as in HandleContextualSearch
+            if (vcpu_response.output_data.count("results_json")) {
+                // ... parse JSON ...
+            } else { // Fallback to simpler mock from vCPU stub
+                ConceptualSearchResultItemProto item;
+                item.url = "http://example.com/vcpu_image_search_result";
+                item.title = "vCPU Image Search Result for context: " + request->textual_context;
+                item.snippet = "Content found by vCPU based on image input.";
+                item.relevance_score = 0.90;
+                item.source_type = "vcpu_image";
+                response->results.push_back(item);
+            }
+            response->error_message = "";
+        } else {
+            response->error_message = "AI-vCPU multimodal search task failed: " + vcpu_response.error_message;
+        }
+    } catch (const std::exception& e) {
+        response->error_message = "Exception during multimodal search: " + std::string(e.what());
+    }
+    return grpc::Status::OK;
+}
+
+grpc::Status AsolServiceImpl::GetContentRecommendations(
+    grpc::ServerContext* context,
+    const ConceptualContentRecommendationsRpcRequest* request,
+    ConceptualRecommendationListProto* response) {
+
+    std::cout << "[AsolServiceImpl] Received GetContentRecommendations request for user: " << (request ? request->user_id : "null") << std::endl;
+    if (!request || !response) {
+        if(response) response->error_message = "Request or Response object is null.";
+        return grpc::Status::OK;
+    }
+
+    core::ConceptualAiTaskRequest ai_task_request;
+    ai_task_request.task_id = "asol_get_recs_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+    ai_task_request.task_type = "GET_RECOMMENDATIONS";
+    ai_task_request.required_specialization = core::ConceptualAiCoreSpecialization::MEMORY_CORE; // And/or CONTROL_CORE
+    ai_task_request.user_id = request->user_id;
+
+    ai_task_request.input_data["max_recommendations"] = std::to_string(request->options.max_recommendations);
+    if(!request->options.current_page_context_summary.empty()) {
+        ai_task_request.input_data["current_page_context_summary"] = request->options.current_page_context_summary;
+    }
+    ai_task_request.input_data["exclude_recently_viewed"] = request->options.exclude_recently_viewed ? "true" : "false";
+
+
+    try {
+        core::ConceptualAiTaskResponse vcpu_response = vcpu_interface_->SubmitTask(ai_task_request);
+        if (vcpu_response.success) {
+            // Conceptual parsing
+            if (vcpu_response.output_data.count("recommendations_json")) {
+                // ... parse ...
+            } else { // Fallback to simpler mock
+                 ConceptualSearchResultItemProto item1;
+                 item1.url = "http://example.com/vcpu_reco1";
+                 item1.title = "vCPU Recommendation 1 for " + request->user_id;
+                 item1.snippet = "You might like this based on your vCPU profile.";
+                 item1.source_type = "vcpu_recommendation";
+                 response->recommendations.push_back(item1);
+            }
+            response->error_message = "";
+        } else {
+            response->error_message = "AI-vCPU recommendation task failed: " + vcpu_response.error_message;
+        }
+    } catch (const std::exception& e) {
+        response->error_message = "Exception during content recommendations: " + std::string(e.what());
+    }
+    return grpc::Status::OK;
+}
+
+grpc::Status AsolServiceImpl::PredictNextBrowsingStep(
+    grpc::ServerContext* context,
+    const ConceptualPredictNextBrowsingStepRpcRequest* request,
+    ConceptualPredictedNextStepProto* response) {
+
+    std::cout << "[AsolServiceImpl] Received PredictNextBrowsingStep request for URL: " << (request ? request->current_url : "null") << std::endl;
+    if (!request || !response) {
+        if(response) response->error_message = "Request or Response object is null.";
+        return grpc::Status::OK;
+    }
+
+    core::ConceptualAiTaskRequest ai_task_request;
+    ai_task_request.task_id = "asol_predict_next_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+    ai_task_request.task_type = "PREDICT_NEXT_STEP";
+    // This would map to a TIF_CORE or similar if we had it in AiCoreSpecialization
+    ai_task_request.required_specialization = core::ConceptualAiCoreSpecialization::CONTROL_CORE; // Placeholder
+    ai_task_request.user_id = request->user_id;
+
+    ai_task_request.input_data["current_url"] = request->current_url;
+    // recent_history_urls would be serialized (e.g., JSON array string)
+    ai_task_request.input_data["recent_history_count"] = std::to_string(request->recent_history_urls.size());
+
+
+    try {
+        core::ConceptualAiTaskResponse vcpu_response = vcpu_interface_->SubmitTask(ai_task_request);
+        if (vcpu_response.success) {
+            response->predicted_url = vcpu_response.output_data.count("predicted_url") ? vcpu_response.output_data.at("predicted_url") : "http://example.com/vcpu_predicted_default";
+            response->prediction_reason = vcpu_response.output_data.count("prediction_reason") ? vcpu_response.output_data.at("prediction_reason") : "vCPU based prediction.";
+            response->confidence_score = vcpu_response.output_data.count("confidence_score") ? std::stod(vcpu_response.output_data.at("confidence_score")) : 0.65;
+            response->error_message = "";
+        } else {
+            response->error_message = "AI-vCPU prediction task failed: " + vcpu_response.error_message;
+        }
+    } catch (const std::exception& e) {
+        response->error_message = "Exception during next step prediction: " + std::string(e.what());
+    }
+    return grpc::Status::OK;
+}
+
+
 } // namespace asol
 } // namespace dashai_browser
 } // namespace prometheus_ecosystem

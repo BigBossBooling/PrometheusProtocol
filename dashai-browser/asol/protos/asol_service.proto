@@ -131,6 +131,12 @@ service AsolService {
 
     // Handles various content creation/assistance tasks.
     rpc HandleContentCreation(ContentCreationRpcRequest) returns (ContentCreationRpcResponse);
+
+    // --- RPCs for AI-Enhanced Search & Discovery ---
+    rpc HandleContextualSearch(ContextualSearchRpcRequest) returns (SearchResponseProto);
+    rpc HandleMultimodalSearch(MultimodalSearchRpcRequest) returns (SearchResponseProto);
+    rpc GetContentRecommendations(ContentRecommendationsRpcRequest) returns (RecommendationListProto);
+    rpc PredictNextBrowsingStep(PredictNextBrowsingStepRpcRequest) returns (PredictedNextStepProto);
 }
 
 // --- Messages for GetPageSummary RPC ---
@@ -233,4 +239,77 @@ message ContentCreationRpcResponse {
     string resulting_text = 1;   // The main output text (rephrased, translated, generated)
     string error_message = 2;    // Empty if successful
     map<string, string> metadata = 3; // e.g., language detected, tokens used
+}
+
+// --- Messages for AI-Enhanced Search & Discovery RPCs (mirroring Mojo structs) ---
+
+message ContextualSearchOptionsProto {
+    bool include_history = 1;
+    bool include_bookmarks = 2;
+    string current_page_url = 3;        // Optional in Mojo (string?)
+    string current_page_context_summary = 4; // Optional in Mojo (string?)
+    uint32 max_results = 5;
+}
+
+message SearchResultItemProto {
+    string url = 1;
+    string title = 2;
+    string snippet = 3;
+    double relevance_score = 4;
+    string source_type = 5;
+    string thumbnail_url_or_data = 6; // Optional in Mojo (string?)
+    map<string, string> additional_metadata = 7;
+}
+
+message SearchResponseProto {
+    repeated SearchResultItemProto results = 1;
+    string suggested_query_correction = 2; // Optional in Mojo (string?)
+    string error_message = 3;              // Optional in Mojo (string?)
+}
+
+message ContextualSearchRpcRequest {
+    string query = 1;
+    string current_page_content_summary = 2; // Optional in Mojo (string?)
+    ContextualSearchOptionsProto options = 3;
+    string user_id = 4;      // Optional
+    string session_id = 5;   // Optional
+}
+
+message MultimodalSearchRpcRequest {
+    bytes image_data = 1;
+    string textual_context = 2; // Optional in Mojo (string?)
+    ContextualSearchOptionsProto options = 3; // Re-using, can be specialized
+    string user_id = 4;      // Optional
+    string session_id = 5;   // Optional
+}
+
+message RecommendationOptionsProto {
+    uint32 max_recommendations = 1;
+    string current_page_context_summary = 2; // Optional in Mojo (string?)
+    bool exclude_recently_viewed = 3;
+}
+
+message ContentRecommendationsRpcRequest {
+    string user_id = 1;
+    RecommendationOptionsProto options = 2;
+    string session_id = 3;   // Optional
+}
+
+message RecommendationListProto {
+    repeated SearchResultItemProto recommendations = 1; // Re-using SearchResultItemProto
+    string error_message = 2; // Optional in Mojo (string?)
+}
+
+message PredictNextBrowsingStepRpcRequest {
+    string current_url = 1;
+    repeated string recent_history_urls = 2;
+    string user_id = 3;      // Optional
+    string session_id = 4;   // Optional
+}
+
+message PredictedNextStepProto {
+    string predicted_url = 1;
+    string prediction_reason = 2;
+    double confidence_score = 3;
+    string error_message = 4; // Optional in Mojo (string?)
 }

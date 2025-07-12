@@ -385,3 +385,140 @@ This section details the UI/UX for AI-powered assistance directly within text in
 *   **Loading/Processing:** When AI is working, the "Jules Spark" icon might animate, or a subtle progress indicator could appear near the text field/sidebar.
 *   **Suggestions:** AI suggestions (e.g., alternative phrasing, corrections) could appear as inline annotations (like Grammarly) or in a diff view.
 *   **Feedback:** Standard thumbs up/down and a "Report Issue/Suggest Improvement" option for all AI-generated/assisted content, linking to the `SubmitPromptFeedback` flow.
+
+## VII. Feature: AI-Enhanced Search & Discovery
+
+This section details the UI/UX for transforming traditional search into an intelligent, contextual, and multimodal discovery experience within DashAIBrowser.
+
+### A. Omnibox (Address Bar) AI Enhancements
+
+1.  **Dynamic, Context-Aware Suggestions:**
+    *   **Appearance:** As the user types a query, the dropdown suggestions go beyond simple keyword matches or browsing history.
+    *   **AI-Powered Suggestions:**
+        *   **Query Clarifications:** "Did you mean X related to [current page context]?"
+        *   **Conceptual Matches:** Suggests topics or entities related to the query, not just string matches (e.g., typing "Italian food" might suggest "best pasta recipes" or "history of pizza" even if those exact words aren't in history).
+        *   **Actionable Prompts:** "Search for [query] on [specific academic site]" or "Find images of [query] from [date range]."
+        *   **Proactive Answers (Minor):** For very simple factual queries, a direct answer snippet might appear (e.g., "Weather in London: 15°C").
+    *   **Visual Cue:** AI-generated suggestions could have a distinct icon (e.g., "✨") or subtle background highlight.
+
+2.  **Multimodal Search Trigger:**
+    *   **Appearance:** A small camera icon (📷) or a generic "multimedia input" icon appears within the Omnibox/search bar, possibly when it's focused or an image is copied to the clipboard.
+    *   **Interaction:**
+        *   Clicking the icon opens a small popover or system file dialog to:
+            *   Upload an image file.
+            *   Paste an image from the clipboard.
+            *   (Future) Capture a region of the screen.
+            *   (Future) Use the device camera.
+        *   Once an image is selected, the user can optionally add text to the query (e.g., "What style of architecture is this [image]?").
+        *   Pressing Enter or a "Search" button initiates the multimodal search.
+
+### B. "Discovery Hub" - AI-Driven Content Recommendation Sidebar/Panel
+
+1.  **Appearance & Activation:**
+    *   A dedicated, toggleable sidebar or a section within a "New Tab Page" dashboard.
+    *   Can be manually opened or proactively slide out with a notification when highly relevant content is detected.
+2.  **Content Sections:**
+    *   **"For You (Contextual)":** Recommendations based on the current webpage content, recent browsing activity, or active tasks.
+        *   Examples: "Related articles to [current page topic]," "Further reading on [entity mentioned on page]," "Tools that might help with [task inferred from page content]."
+    *   **"Explore Your Interests":** Recommendations based on longer-term user profile and explicitly stated interests (if any).
+        *   Examples: "New in [user's favorite tech field]," "Trending recipes for [user's dietary preference]."
+    *   **"Trending & Relevant":** Contextually relevant trending news, articles, or discussions from configured sources.
+    *   **"Re-discover":** Surfaces relevant items from the user's deep history that they might have forgotten but are related to current activity.
+3.  **Recommendation Cards:**
+    *   Visually rich cards displaying: title, snippet, source, thumbnail image (if available), and a brief explanation of *why* it's recommended (e.g., "Because you read about X," "Related to your current search for Y").
+4.  **User Controls:**
+    *   "See more/less like this."
+    *   "Not interested / Hide topic."
+    *   Source filtering.
+    *   Personalization settings (e.g., manage interest profile).
+
+### C. Semantic History Dashboard ("Memory Lane")
+
+1.  **Appearance & Activation:**
+    *   A redesigned browser history page (e.g., `dashai://history` or `dashai://memory`).
+    *   Accessible via the standard "History" menu.
+2.  **Key Features:**
+    *   **Natural Language Search:** A prominent search bar allowing users to query their history naturally:
+        *   "What was that Python library for data visualization I looked at last month?"
+        *   "Show me articles about quantum computing I read in March."
+        *   "Pages I visited related to my 'Project X' research."
+    *   **Visual Journey Mapping (Conceptual):** Instead of just a chronological list, an option to visualize browsing sessions as connected graphs or timelines, showing how the user navigated from one topic/page to another.
+    *   **Semantic Grouping:** AI automatically groups related history items by topic, project, or inferred task, even if they weren't explicitly tagged by the user.
+    *   **Enhanced Filtering:** Beyond date/URL, filter by AI-detected topics, entities, or inferred tasks.
+    *   **"On This Day" / "Flashback":** Surfaces interesting or relevant past browsing activity.
+
+### D. Interaction Flow Example (Contextual Omnibox Search)
+
+1.  **User Context:** User is browsing a webpage about "sustainable architecture."
+2.  **User Action:** User clicks into the Omnibox and starts typing "green building materials."
+3.  **AI Omnibox Suggestions:**
+    *   Standard history/bookmark matches for "green building materials."
+    *   **AI Suggestion 1:** "Search for 'eco-friendly insulation types' (related to sustainable architecture)"
+    *   **AI Suggestion 2:** "Find research papers on 'bamboo construction techniques'"
+    *   **AI Suggestion 3 (Action):** "Show me images of 'rammed earth homes'"
+4.  User selects "AI Suggestion 1."
+5.  **Browser-Side Action:** `SearchDiscoveryService` is invoked.
+6.  **Mojo Call:** `RequestContextualSearch("eco-friendly insulation types", "<summary_or_keywords_of_current_page>", options)`.
+7.  **ASOL & AI-vCPU:**
+    *   ASOL receives the request.
+    *   Translates to `AiTaskRequest` (`task_type: "CONTEXTUAL_SEARCH"`). `input_data` includes query and page context. `required_specialization` might point to `LANGUAGE_MODELER` and `MEMORY_CORE`.
+    *   (Mocked) AI-vCPU processes, potentially weighting results based on "sustainable architecture" context.
+    *   Returns `AiTaskResponse` with a list of `SearchResultItem` objects.
+8.  **Results Display:** Search results page is displayed, potentially with a note "Results refined based on your current context: Sustainable Architecture."
+
+This conceptualization aims to make search and discovery more intelligent, personalized, and integrated into the user's workflow.
+
+### E. Conceptual Integration Test Scenarios for AI-Enhanced Search & Discovery
+
+These scenarios outline end-to-end tests, focusing on the data flow from browser UI through ASOL to the (mocked) AI-vCPU.
+
+1.  **Scenario: Contextual Text Search**
+    *   **Setup:** Browser open to a page about "DIY home repair." `MockEchoSphereVCPU` configured.
+    *   **User Action:** Types "best adhesive for wood" into the Omnibox.
+    *   **Browser-Side:** `SearchDiscoveryService` calls Mojo `RequestContextualSearch` with query, page context ("DIY home repair" summary), and options.
+    *   **ASOL (Mojo Impl):** Receives Mojo call, makes gRPC call to `AsolServiceImpl::HandleContextualSearch`.
+    *   **ASOL (`AsolServiceImpl`):**
+        *   Creates `AiTaskRequest` (type: "CONTEXTUAL_SEARCH", input: query + context).
+        *   Calls `vcpu_interface_->SubmitTask()`.
+    *   **AI-vCPU (Mocked):**
+        *   Receives task.
+        *   Returns `AiTaskResponse` with `success: true` and `output_data` containing a JSON string of `SearchResultItemProto` (e.g., results for "wood glue," "epoxy for repairs," with higher relevance for DIY-related terms).
+    *   **ASOL & Browser:** Response flows back, search results UI is populated with items like "Gorilla Wood Glue," "Heavy Duty Epoxy for Wood."
+
+2.  **Scenario: Multimodal Image Search**
+    *   **User Action:** User has an image of a specific type of plant. Clicks the multimodal search icon in Omnibox, uploads the image, and types "care instructions."
+    *   **Browser-Side:** `SearchDiscoveryService` calls Mojo `RequestMultimodalSearch` with image data and text "care instructions."
+    *   **ASOL (Mojo Impl):** Calls `AsolServiceImpl::HandleMultimodalSearch`.
+    *   **ASOL (`AsolServiceImpl`):**
+        *   Creates `AiTaskRequest` (type: "MULTIMODAL_SEARCH", input: image data (e.g., base64) + text). Sets `required_specialization = VISION_INTERPRETER`.
+        *   Calls `vcpu_interface_->SubmitTask()`.
+    *   **AI-vCPU (Mocked):**
+        *   (Conceptual) `Vision_Interpreter` identifies the plant (e.g., "Fiddle Leaf Fig").
+        *   (Conceptual) `Language_Modeler` + `Knowledge_Navigator` find care instructions.
+        *   Returns `AiTaskResponse` with `success: true` and `output_data` containing `SearchResultItemProto` linking to "Fiddle Leaf Fig care guides."
+    *   **ASOL & Browser:** Response flows back, search results show relevant care guides.
+
+3.  **Scenario: Content Recommendation Request**
+    *   **User Action:** User opens the "Discovery Hub" sidebar.
+    *   **Browser-Side:** `SearchDiscoveryService` calls Mojo `GetContentRecommendations` with `user_id` and options (e.g., current page context).
+    *   **ASOL (Mojo Impl):** Calls `AsolServiceImpl::GetContentRecommendations`.
+    *   **ASOL (`AsolServiceImpl`):**
+        *   Creates `AiTaskRequest` (type: "GET_RECOMMENDATIONS", input: user_id, context). Sets `required_specialization = MEMORY_CORE` (for profile) and `CONTROL_CORE` (for logic).
+        *   Calls `vcpu_interface_->SubmitTask()`.
+    *   **AI-vCPU (Mocked):**
+        *   Accesses (mocked) user profile from `Memory_Core`.
+        *   Generates recommendations.
+        *   Returns `AiTaskResponse` with `success: true` and `output_data` containing a JSON string of `SearchResultItemProto` for recommendations.
+    *   **ASOL & Browser:** Response flows back, Discovery Hub UI populated with recommendation cards.
+
+4.  **Scenario: Predictive Next Step**
+    *   **User Action:** User is browsing `example.com/tech/article1`.
+    *   **Browser-Side (Proactive):** `SearchDiscoveryService` (perhaps triggered by navigation events) calls Mojo `PredictNextBrowsingStep` with current URL and recent history.
+    *   **ASOL (Mojo Impl):** Calls `AsolServiceImpl::PredictNextBrowsingStep`.
+    *   **ASOL (`AsolServiceImpl`):**
+        *   Creates `AiTaskRequest` (type: "PREDICT_NEXT_STEP", input: current URL, history). Sets `required_specialization = TIF_CORE` (conceptual Temporal Intelligence Framework core).
+        *   Calls `vcpu_interface_->SubmitTask()`.
+    *   **AI-vCPU (Mocked):**
+        *   Analyzes (mocked) patterns.
+        *   Returns `AiTaskResponse` with `success: true` and `output_data` containing `predicted_url = "example.com/tech/related_article2"` and a reason.
+    *   **ASOL & Browser:** Response flows back. Browser UI might subtly preload `related_article2` or show a non-intrusive suggestion: "Next up: Related Article 2?".

@@ -226,6 +226,79 @@ struct ConceptualContentCreationRpcResponse {
 };
 // --- End conceptual structs for HandleContentCreation ---
 
+// --- Conceptual C++ structs for AI-Enhanced Search & Discovery RPCs ---
+struct ConceptualContextualSearchOptionsProto {
+    bool include_history = true;
+    bool include_bookmarks = true;
+    std::string current_page_url;
+    std::string current_page_context_summary;
+    uint32_t max_results = 10;
+};
+
+struct ConceptualSearchResultItemProto {
+    std::string url;
+    std::string title;
+    std::string snippet;
+    double relevance_score = 0.0;
+    std::string source_type;
+    std::string thumbnail_url_or_data;
+    std::map<std::string, std::string> additional_metadata;
+};
+
+struct ConceptualSearchResponseProto {
+    std::vector<ConceptualSearchResultItemProto> results;
+    std::string suggested_query_correction;
+    std::string error_message;
+};
+
+struct ConceptualContextualSearchRpcRequest {
+    std::string query;
+    std::string current_page_content_summary;
+    ConceptualContextualSearchOptionsProto options;
+    std::string user_id;
+    std::string session_id;
+};
+
+struct ConceptualMultimodalSearchRpcRequest {
+    std::vector<uint8_t> image_data; // Using std::vector<uint8_t> for bytes
+    std::string textual_context;
+    ConceptualContextualSearchOptionsProto options; // Re-using
+    std::string user_id;
+    std::string session_id;
+};
+
+struct ConceptualRecommendationOptionsProto {
+    uint32_t max_recommendations = 5;
+    std::string current_page_context_summary;
+    bool exclude_recently_viewed = true;
+};
+
+struct ConceptualContentRecommendationsRpcRequest {
+    std::string user_id;
+    ConceptualRecommendationOptionsProto options;
+    std::string session_id;
+};
+
+struct ConceptualRecommendationListProto {
+    std::vector<ConceptualSearchResultItemProto> recommendations; // Re-using
+    std::string error_message;
+};
+
+struct ConceptualPredictNextBrowsingStepRpcRequest {
+    std::string current_url;
+    std::vector<std::string> recent_history_urls;
+    std::string user_id;
+    std::string session_id;
+};
+
+struct ConceptualPredictedNextStepProto {
+    std::string predicted_url;
+    std::string prediction_reason;
+    double confidence_score = 0.0;
+    std::string error_message;
+};
+// --- End conceptual structs for AI-Enhanced Search & Discovery RPCs ---
+
 
 } // namespace asol
 } // namespace dashai_browser

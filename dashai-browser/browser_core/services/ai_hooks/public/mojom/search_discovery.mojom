@@ -1,0 +1,100 @@
+// Defines interfaces for AI-enhanced search and discovery features,
+// used for communication between browser UI/logic and the ASOL backend.
+module dashaibrowser.mojom;
+
+// Options for contextual search requests.
+struct ContextualSearchOptions {
+  // If true, results from user's browsing history should be considered and prioritized.
+  bool include_history = true;
+  // If true, results from user's bookmarks should be considered.
+  bool include_bookmarks = true;
+  // The URL of the current page, to provide context for the search.
+  string? current_page_url;
+  // Summary or keywords from the current page content, for deeper context.
+  string? current_page_context_summary;
+  // Desired number of results (can be a hint).
+  uint32 max_results = 10;
+};
+
+// Represents a single item in a list of search results or recommendations.
+struct SearchResultItem {
+  string url;
+  string title;
+  // A brief snippet or description of the content.
+  string snippet;
+  // Relevance score assigned by the search/ranking algorithm (e.g., 0.0 to 1.0).
+  double relevance_score;
+  // Type of source, e.g., "history", "bookmark", "web_search", "image_match", "recommendation".
+  string source_type;
+  // Optional: URL to a thumbnail image or a base64 encoded data URI.
+  string? thumbnail_url_or_data;
+  // Optional: Additional metadata like last visited time, tags, etc.
+  map<string, string> additional_metadata;
+};
+
+// Response for search queries (contextual and multimodal).
+struct SearchResponse {
+  array<SearchResultItem> results;
+  // If the AI suggests a correction or refinement to the original query.
+  string? suggested_query_correction;
+  string? error_message; // Empty if successful.
+};
+
+// Options for requesting content recommendations.
+struct RecommendationOptions {
+  uint32 max_recommendations = 5;
+  // Hint about the user's current high-level interest profile or context.
+  // string? interest_profile_hint; // e.g., "technology", "cooking", "current_task_research_AI"
+  // If true, content the user has viewed very recently might be excluded.
+  bool exclude_recently_viewed = true;
+  // Context from current page to make recommendations more relevant
+  string? current_page_context_summary;
+};
+
+// List of recommended content items.
+struct RecommendationList {
+  // Re-using SearchResultItem as the structure is very similar.
+  // A 'reason_for_recommendation' could be added to SearchResultItem's metadata.
+  array<SearchResultItem> recommendations;
+  string? error_message; // Empty if successful.
+};
+
+// Information about a predicted next browsing step.
+struct PredictedNextStep {
+  string predicted_url;
+  // Explanation of why this URL is predicted (e.g., "Based on similar browsing patterns for topic X").
+  string prediction_reason;
+  // Confidence score for the prediction (e.g., 0.0 to 1.0).
+  double confidence_score;
+  string? error_message; // Empty if successful.
+};
+
+// Main interface for AI-enhanced search and discovery services.
+// Implemented by ASOL (or a service it delegates to) and called by browser features.
+interface SearchAndDiscovery {
+  // Performs an AI-refined text search, considering user query and contextual information.
+  // `query`: The user's textual search query.
+  // `current_page_content_summary`: A summary or keywords from the current page for context.
+  // `options`: Additional options to guide the search.
+  RequestContextualSearch(string query, string? current_page_content_summary, ContextualSearchOptions options)
+    => (SearchResponse response);
+
+  // Performs a search based on image data, optionally with textual context.
+  // `image_data`: Raw byte data of the image.
+  // `textual_context`: Any additional text query to accompany the image.
+  // `options`: Contextual search options, may also include image-specific flags in future.
+  RequestMultimodalSearch(array<uint8> image_data, string? textual_context, ContextualSearchOptions options)
+    => (SearchResponse response);
+
+  // Retrieves personalized content recommendations for the user.
+  // `user_id`: Identifier for the user to fetch their profile/history.
+  // `options`: Configuration for the recommendation request.
+  GetContentRecommendations(string user_id, RecommendationOptions options)
+    => (RecommendationList response);
+
+  // Predicts the user's next likely browsing step based on current URL and recent history.
+  // `current_url`: The URL of the page the user is currently on.
+  // `recent_history_urls`: A list of recently visited URLs or a summary of recent browsing topics.
+  PredictNextBrowsingStep(string current_url, array<string> recent_history_urls)
+    => (PredictedNextStep response);
+};
