@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package prometheus;
+
+option go_package = "github.com/your-username/prometheus-protocol/proto";
+
+// PromptObject represents a structured request to an AI model.
+message PromptObject {
+  string id = 1;
+  string user_id = 2;
+  string session_id = 3;
+  string prompt = 4;
+  map<string, string> variables = 5;
+  string model = 6;
+  double temperature = 7;
+  int32 max_tokens = 8;
+}
+
+// ConversationState represents the state of a conversation with an AI model.
+message ConversationState {
+  string id = 1;
+  string user_id = 2;
+  string session_id = 3;
+  repeated PromptObject prompts = 4;
+  map<string, string> metadata = 5;
+}
