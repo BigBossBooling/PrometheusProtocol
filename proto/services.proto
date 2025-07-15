@@ -9,4 +9,8 @@ option go_package = "github.com/your-username/prometheus-protocol/proto";
 // PromptService is a gRPC service for generating prompts.
 service PromptService {
   rpc GeneratePrompt(PromptGenerationRequest) returns (GeneratedPrompt);
+  rpc SubmitFeedback(OptimizationFeedback) returns (SubmitFeedbackResponse);
+  rpc OptimizePrompt(PromptOptimizationState) returns (PromptTemplate);
 }
+
+message SubmitFeedbackResponse {}

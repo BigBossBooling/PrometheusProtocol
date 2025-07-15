@@ -20,6 +20,8 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	PromptService_GeneratePrompt_FullMethodName = "/prometheus.PromptService/GeneratePrompt"
+	PromptService_SubmitFeedback_FullMethodName = "/prometheus.PromptService/SubmitFeedback"
+	PromptService_OptimizePrompt_FullMethodName = "/prometheus.PromptService/OptimizePrompt"
 )
 
 // PromptServiceClient is the client API for PromptService service.
@@ -29,6 +31,8 @@ const (
 // PromptService is a gRPC service for generating prompts.
 type PromptServiceClient interface {
 	GeneratePrompt(ctx context.Context, in *PromptGenerationRequest, opts ...grpc.CallOption) (*GeneratedPrompt, error)
+	SubmitFeedback(ctx context.Context, in *OptimizationFeedback, opts ...grpc.CallOption) (*SubmitFeedbackResponse, error)
+	OptimizePrompt(ctx context.Context, in *PromptOptimizationState, opts ...grpc.CallOption) (*PromptTemplate, error)
 }
 
 type promptServiceClient struct {
@@ -49,6 +53,26 @@ func (c *promptServiceClient) GeneratePrompt(ctx context.Context, in *PromptGene
 	return out, nil
 }
 
+func (c *promptServiceClient) SubmitFeedback(ctx context.Context, in *OptimizationFeedback, opts ...grpc.CallOption) (*SubmitFeedbackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubmitFeedbackResponse)
+	err := c.cc.Invoke(ctx, PromptService_SubmitFeedback_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *promptServiceClient) OptimizePrompt(ctx context.Context, in *PromptOptimizationState, opts ...grpc.CallOption) (*PromptTemplate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PromptTemplate)
+	err := c.cc.Invoke(ctx, PromptService_OptimizePrompt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PromptServiceServer is the server API for PromptService service.
 // All implementations must embed UnimplementedPromptServiceServer
 // for forward compatibility.
@@ -56,6 +80,8 @@ func (c *promptServiceClient) GeneratePrompt(ctx context.Context, in *PromptGene
 // PromptService is a gRPC service for generating prompts.
 type PromptServiceServer interface {
 	GeneratePrompt(context.Context, *PromptGenerationRequest) (*GeneratedPrompt, error)
+	SubmitFeedback(context.Context, *OptimizationFeedback) (*SubmitFeedbackResponse, error)
+	OptimizePrompt(context.Context, *PromptOptimizationState) (*PromptTemplate, error)
 	mustEmbedUnimplementedPromptServiceServer()
 }
 
@@ -68,6 +94,12 @@ type UnimplementedPromptServiceServer struct{}
 
 func (UnimplementedPromptServiceServer) GeneratePrompt(context.Context, *PromptGenerationRequest) (*GeneratedPrompt, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GeneratePrompt not implemented")
+}
+func (UnimplementedPromptServiceServer) SubmitFeedback(context.Context, *OptimizationFeedback) (*SubmitFeedbackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubmitFeedback not implemented")
+}
+func (UnimplementedPromptServiceServer) OptimizePrompt(context.Context, *PromptOptimizationState) (*PromptTemplate, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OptimizePrompt not implemented")
 }
 func (UnimplementedPromptServiceServer) mustEmbedUnimplementedPromptServiceServer() {}
 func (UnimplementedPromptServiceServer) testEmbeddedByValue()                       {}
@@ -108,6 +140,42 @@ func _PromptService_GeneratePrompt_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PromptService_SubmitFeedback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OptimizationFeedback)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PromptServiceServer).SubmitFeedback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PromptService_SubmitFeedback_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PromptServiceServer).SubmitFeedback(ctx, req.(*OptimizationFeedback))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PromptService_OptimizePrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PromptOptimizationState)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PromptServiceServer).OptimizePrompt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PromptService_OptimizePrompt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PromptServiceServer).OptimizePrompt(ctx, req.(*PromptOptimizationState))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PromptService_ServiceDesc is the grpc.ServiceDesc for PromptService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -118,6 +186,14 @@ var PromptService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GeneratePrompt",
 			Handler:    _PromptService_GeneratePrompt_Handler,
+		},
+		{
+			MethodName: "SubmitFeedback",
+			Handler:    _PromptService_SubmitFeedback_Handler,
+		},
+		{
+			MethodName: "OptimizePrompt",
+			Handler:    _PromptService_OptimizePrompt_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -10,6 +10,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
+	sync "sync"
 	unsafe "unsafe"
 )
 
@@ -20,24 +21,84 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type SubmitFeedbackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitFeedbackResponse) Reset() {
+	*x = SubmitFeedbackResponse{}
+	mi := &file_proto_services_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitFeedbackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitFeedbackResponse) ProtoMessage() {}
+
+func (x *SubmitFeedbackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_services_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitFeedbackResponse.ProtoReflect.Descriptor instead.
+func (*SubmitFeedbackResponse) Descriptor() ([]byte, []int) {
+	return file_proto_services_proto_rawDescGZIP(), []int{0}
+}
+
 var File_proto_services_proto protoreflect.FileDescriptor
 
 const file_proto_services_proto_rawDesc = "" +
 	"\n" +
 	"\x14proto/services.proto\x12\n" +
-	"prometheus\x1a\x1bproto/prompt_messages.proto2c\n" +
+	"prometheus\x1a\x1bproto/prompt_messages.proto\"\x18\n" +
+	"\x16SubmitFeedbackResponse2\x8e\x02\n" +
 	"\rPromptService\x12R\n" +
-	"\x0eGeneratePrompt\x12#.prometheus.PromptGenerationRequest\x1a\x1b.prometheus.GeneratedPromptB4Z2github.com/your-username/prometheus-protocol/protob\x06proto3"
+	"\x0eGeneratePrompt\x12#.prometheus.PromptGenerationRequest\x1a\x1b.prometheus.GeneratedPrompt\x12V\n" +
+	"\x0eSubmitFeedback\x12 .prometheus.OptimizationFeedback\x1a\".prometheus.SubmitFeedbackResponse\x12Q\n" +
+	"\x0eOptimizePrompt\x12#.prometheus.PromptOptimizationState\x1a\x1a.prometheus.PromptTemplateB4Z2github.com/your-username/prometheus-protocol/protob\x06proto3"
 
+var (
+	file_proto_services_proto_rawDescOnce sync.Once
+	file_proto_services_proto_rawDescData []byte
+)
+
+func file_proto_services_proto_rawDescGZIP() []byte {
+	file_proto_services_proto_rawDescOnce.Do(func() {
+		file_proto_services_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_services_proto_rawDesc), len(file_proto_services_proto_rawDesc)))
+	})
+	return file_proto_services_proto_rawDescData
+}
+
+var file_proto_services_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_proto_services_proto_goTypes = []any{
-	(*PromptGenerationRequest)(nil), // 0: prometheus.PromptGenerationRequest
-	(*GeneratedPrompt)(nil),         // 1: prometheus.GeneratedPrompt
+	(*SubmitFeedbackResponse)(nil),  // 0: prometheus.SubmitFeedbackResponse
+	(*PromptGenerationRequest)(nil), // 1: prometheus.PromptGenerationRequest
+	(*OptimizationFeedback)(nil),    // 2: prometheus.OptimizationFeedback
+	(*PromptOptimizationState)(nil), // 3: prometheus.PromptOptimizationState
+	(*GeneratedPrompt)(nil),         // 4: prometheus.GeneratedPrompt
+	(*PromptTemplate)(nil),          // 5: prometheus.PromptTemplate
 }
 var file_proto_services_proto_depIdxs = []int32{
-	0, // 0: prometheus.PromptService.GeneratePrompt:input_type -> prometheus.PromptGenerationRequest
-	1, // 1: prometheus.PromptService.GeneratePrompt:output_type -> prometheus.GeneratedPrompt
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	1, // 0: prometheus.PromptService.GeneratePrompt:input_type -> prometheus.PromptGenerationRequest
+	2, // 1: prometheus.PromptService.SubmitFeedback:input_type -> prometheus.OptimizationFeedback
+	3, // 2: prometheus.PromptService.OptimizePrompt:input_type -> prometheus.PromptOptimizationState
+	4, // 3: prometheus.PromptService.GeneratePrompt:output_type -> prometheus.GeneratedPrompt
+	0, // 4: prometheus.PromptService.SubmitFeedback:output_type -> prometheus.SubmitFeedbackResponse
+	5, // 5: prometheus.PromptService.OptimizePrompt:output_type -> prometheus.PromptTemplate
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -55,12 +116,13 @@ func file_proto_services_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_services_proto_rawDesc), len(file_proto_services_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   0,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_proto_services_proto_goTypes,
 		DependencyIndexes: file_proto_services_proto_depIdxs,
+		MessageInfos:      file_proto_services_proto_msgTypes,
 	}.Build()
 	File_proto_services_proto = out.File
 	file_proto_services_proto_goTypes = nil

@@ -23,3 +23,19 @@ message GeneratedPrompt {
   string prompt_string = 1;
   map<string, string> metadata = 2;
 }
+
+// OptimizationFeedback represents feedback on a generated prompt.
+message OptimizationFeedback {
+  string prompt_id = 1;
+  float response_quality_score = 2;
+  float user_satisfaction_score = 3;
+  bool task_success_status = 4;
+  string feedback_text = 5;
+}
+
+// PromptOptimizationState represents the optimization state of a prompt template.
+message PromptOptimizationState {
+  string prompt_template_id = 1;
+  int32 current_version = 2;
+  repeated OptimizationFeedback performance_history = 3;
+}

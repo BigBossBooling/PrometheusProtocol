@@ -196,6 +196,144 @@ func (x *GeneratedPrompt) GetMetadata() map[string]string {
 	return nil
 }
 
+// OptimizationFeedback represents feedback on a generated prompt.
+type OptimizationFeedback struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	PromptId              string                 `protobuf:"bytes,1,opt,name=prompt_id,json=promptId,proto3" json:"prompt_id,omitempty"`
+	ResponseQualityScore  float32                `protobuf:"fixed32,2,opt,name=response_quality_score,json=responseQualityScore,proto3" json:"response_quality_score,omitempty"`
+	UserSatisfactionScore float32                `protobuf:"fixed32,3,opt,name=user_satisfaction_score,json=userSatisfactionScore,proto3" json:"user_satisfaction_score,omitempty"`
+	TaskSuccessStatus     bool                   `protobuf:"varint,4,opt,name=task_success_status,json=taskSuccessStatus,proto3" json:"task_success_status,omitempty"`
+	FeedbackText          string                 `protobuf:"bytes,5,opt,name=feedback_text,json=feedbackText,proto3" json:"feedback_text,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *OptimizationFeedback) Reset() {
+	*x = OptimizationFeedback{}
+	mi := &file_proto_prompt_messages_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OptimizationFeedback) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OptimizationFeedback) ProtoMessage() {}
+
+func (x *OptimizationFeedback) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_prompt_messages_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OptimizationFeedback.ProtoReflect.Descriptor instead.
+func (*OptimizationFeedback) Descriptor() ([]byte, []int) {
+	return file_proto_prompt_messages_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OptimizationFeedback) GetPromptId() string {
+	if x != nil {
+		return x.PromptId
+	}
+	return ""
+}
+
+func (x *OptimizationFeedback) GetResponseQualityScore() float32 {
+	if x != nil {
+		return x.ResponseQualityScore
+	}
+	return 0
+}
+
+func (x *OptimizationFeedback) GetUserSatisfactionScore() float32 {
+	if x != nil {
+		return x.UserSatisfactionScore
+	}
+	return 0
+}
+
+func (x *OptimizationFeedback) GetTaskSuccessStatus() bool {
+	if x != nil {
+		return x.TaskSuccessStatus
+	}
+	return false
+}
+
+func (x *OptimizationFeedback) GetFeedbackText() string {
+	if x != nil {
+		return x.FeedbackText
+	}
+	return ""
+}
+
+// PromptOptimizationState represents the optimization state of a prompt template.
+type PromptOptimizationState struct {
+	state              protoimpl.MessageState  `protogen:"open.v1"`
+	PromptTemplateId   string                  `protobuf:"bytes,1,opt,name=prompt_template_id,json=promptTemplateId,proto3" json:"prompt_template_id,omitempty"`
+	CurrentVersion     int32                   `protobuf:"varint,2,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
+	PerformanceHistory []*OptimizationFeedback `protobuf:"bytes,3,rep,name=performance_history,json=performanceHistory,proto3" json:"performance_history,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PromptOptimizationState) Reset() {
+	*x = PromptOptimizationState{}
+	mi := &file_proto_prompt_messages_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PromptOptimizationState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PromptOptimizationState) ProtoMessage() {}
+
+func (x *PromptOptimizationState) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_prompt_messages_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PromptOptimizationState.ProtoReflect.Descriptor instead.
+func (*PromptOptimizationState) Descriptor() ([]byte, []int) {
+	return file_proto_prompt_messages_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PromptOptimizationState) GetPromptTemplateId() string {
+	if x != nil {
+		return x.PromptTemplateId
+	}
+	return ""
+}
+
+func (x *PromptOptimizationState) GetCurrentVersion() int32 {
+	if x != nil {
+		return x.CurrentVersion
+	}
+	return 0
+}
+
+func (x *PromptOptimizationState) GetPerformanceHistory() []*OptimizationFeedback {
+	if x != nil {
+		return x.PerformanceHistory
+	}
+	return nil
+}
+
 var File_proto_prompt_messages_proto protoreflect.FileDescriptor
 
 const file_proto_prompt_messages_proto_rawDesc = "" +
@@ -225,7 +363,17 @@ const file_proto_prompt_messages_proto_rawDesc = "" +
 	"\bmetadata\x18\x02 \x03(\v2).prometheus.GeneratedPrompt.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B4Z2github.com/your-username/prometheus-protocol/protob\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf6\x01\n" +
+	"\x14OptimizationFeedback\x12\x1b\n" +
+	"\tprompt_id\x18\x01 \x01(\tR\bpromptId\x124\n" +
+	"\x16response_quality_score\x18\x02 \x01(\x02R\x14responseQualityScore\x126\n" +
+	"\x17user_satisfaction_score\x18\x03 \x01(\x02R\x15userSatisfactionScore\x12.\n" +
+	"\x13task_success_status\x18\x04 \x01(\bR\x11taskSuccessStatus\x12#\n" +
+	"\rfeedback_text\x18\x05 \x01(\tR\ffeedbackText\"\xc3\x01\n" +
+	"\x17PromptOptimizationState\x12,\n" +
+	"\x12prompt_template_id\x18\x01 \x01(\tR\x10promptTemplateId\x12'\n" +
+	"\x0fcurrent_version\x18\x02 \x01(\x05R\x0ecurrentVersion\x12Q\n" +
+	"\x13performance_history\x18\x03 \x03(\v2 .prometheus.OptimizationFeedbackR\x12performanceHistoryB4Z2github.com/your-username/prometheus-protocol/protob\x06proto3"
 
 var (
 	file_proto_prompt_messages_proto_rawDescOnce sync.Once
@@ -239,26 +387,29 @@ func file_proto_prompt_messages_proto_rawDescGZIP() []byte {
 	return file_proto_prompt_messages_proto_rawDescData
 }
 
-var file_proto_prompt_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_proto_prompt_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_proto_prompt_messages_proto_goTypes = []any{
 	(*PromptTemplate)(nil),          // 0: prometheus.PromptTemplate
 	(*PromptGenerationRequest)(nil), // 1: prometheus.PromptGenerationRequest
 	(*GeneratedPrompt)(nil),         // 2: prometheus.GeneratedPrompt
-	nil,                             // 3: prometheus.PromptTemplate.DefaultContextModifiersEntry
-	nil,                             // 4: prometheus.PromptGenerationRequest.DynamicVariablesEntry
-	nil,                             // 5: prometheus.PromptGenerationRequest.ContextModifiersEntry
-	nil,                             // 6: prometheus.GeneratedPrompt.MetadataEntry
+	(*OptimizationFeedback)(nil),    // 3: prometheus.OptimizationFeedback
+	(*PromptOptimizationState)(nil), // 4: prometheus.PromptOptimizationState
+	nil,                             // 5: prometheus.PromptTemplate.DefaultContextModifiersEntry
+	nil,                             // 6: prometheus.PromptGenerationRequest.DynamicVariablesEntry
+	nil,                             // 7: prometheus.PromptGenerationRequest.ContextModifiersEntry
+	nil,                             // 8: prometheus.GeneratedPrompt.MetadataEntry
 }
 var file_proto_prompt_messages_proto_depIdxs = []int32{
-	3, // 0: prometheus.PromptTemplate.default_context_modifiers:type_name -> prometheus.PromptTemplate.DefaultContextModifiersEntry
-	4, // 1: prometheus.PromptGenerationRequest.dynamic_variables:type_name -> prometheus.PromptGenerationRequest.DynamicVariablesEntry
-	5, // 2: prometheus.PromptGenerationRequest.context_modifiers:type_name -> prometheus.PromptGenerationRequest.ContextModifiersEntry
-	6, // 3: prometheus.GeneratedPrompt.metadata:type_name -> prometheus.GeneratedPrompt.MetadataEntry
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 0: prometheus.PromptTemplate.default_context_modifiers:type_name -> prometheus.PromptTemplate.DefaultContextModifiersEntry
+	6, // 1: prometheus.PromptGenerationRequest.dynamic_variables:type_name -> prometheus.PromptGenerationRequest.DynamicVariablesEntry
+	7, // 2: prometheus.PromptGenerationRequest.context_modifiers:type_name -> prometheus.PromptGenerationRequest.ContextModifiersEntry
+	8, // 3: prometheus.GeneratedPrompt.metadata:type_name -> prometheus.GeneratedPrompt.MetadataEntry
+	3, // 4: prometheus.PromptOptimizationState.performance_history:type_name -> prometheus.OptimizationFeedback
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proto_prompt_messages_proto_init() }
@@ -272,7 +423,7 @@ func file_proto_prompt_messages_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_prompt_messages_proto_rawDesc), len(file_proto_prompt_messages_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
