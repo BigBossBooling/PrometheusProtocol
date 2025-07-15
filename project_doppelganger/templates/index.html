@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Doppelganger</title>
+</head>
+<body>
+    <h1>Project Doppelganger</h1>
+    <input type="text" id="user_input" placeholder="Enter your message">
+    <button onclick="interact()">Send</button>
+    <p id="response"></p>
+
+    <script>
+        async function interact() {
+            const userInput = document.getElementById('user_input').value;
+            const response = await fetch('/interact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_input: userInput })
+            });
+            const data = await response.json();
+            document.getElementById('response').innerText = data.response;
+        }
+    </script>
+</body>
+</html>
