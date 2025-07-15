@@ -71,5 +71,25 @@ void ASOLServiceImpl::PredictNextBrowsingStep(
   std::move(callback).Run(std::move(response));
 }
 
+void ASOLServiceImpl::SubmitUserContext(
+    mojom::UserContextDataPtr data,
+    SubmitUserContextCallback callback) {
+  std::cout << "Received SubmitUserContext request" << std::endl;
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(true);
+}
+
+void ASOLServiceImpl::GetUIAdaptationDirectives(
+    const std::string& user_id,
+    const std::string& current_context,
+    GetUIAdaptationDirectivesCallback callback) {
+  std::cout << "Received GetUIAdaptationDirectives request for user: "
+            << user_id << std::endl;
+  mojom::UIAdaptationDirectivePtr response =
+      mojom::UIAdaptationDirective::New();
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(std::move(response));
+}
+
 }  // namespace asol
 }  // namespace dashai_browser

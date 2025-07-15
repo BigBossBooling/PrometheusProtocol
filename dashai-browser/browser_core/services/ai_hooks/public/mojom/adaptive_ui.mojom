@@ -1,0 +1,24 @@
+module dashai_browser.mojom;
+
+interface AdaptiveUI {
+  SubmitUserContext(UserContextData data) => (bool success);
+  GetUIAdaptationDirectives(string user_id, string current_context) => (UIAdaptationDirective directive);
+};
+
+struct UserContextData {
+  string active_tab_url;
+  string user_activity; // e.g., "typing", "scrolling", "idle"
+  float perceived_cognitive_load;
+};
+
+struct UIAdaptationDirective {
+  string toolbar_layout_id;
+  string sidebar_content_id;
+  NotificationStyle notification_style;
+};
+
+enum NotificationStyle {
+  DISCREET,
+  NORMAL,
+  URGENT,
+};

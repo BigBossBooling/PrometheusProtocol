@@ -2,13 +2,15 @@
 #define DASAI_BROWSER_ASOL_ASOL_SERVICE_IMPL_H_
 
 #include "dashai-browser/asol/protos/asol_service.grpc.pb.h"
+#include "dashai-browser/browser_core/services/ai_hooks/public/mojom/adaptive_ui.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/search_discovery.mojom.h"
 
 namespace dashai_browser {
 namespace asol {
 
 class ASOLServiceImpl final : public ASOLService::Service,
-                              public mojom::SearchDiscovery {
+                              public mojom::SearchDiscovery,
+                              public mojom::AdaptiveUI {
  public:
   ASOLServiceImpl();
   ~ASOLServiceImpl() override;
@@ -41,6 +43,14 @@ class ASOLServiceImpl final : public ASOLService::Service,
       const std::string& current_url,
       const std::string& recent_history_summary,
       PredictNextBrowsingStepCallback callback) override;
+
+  // mojom::AdaptiveUI implementation
+  void SubmitUserContext(mojom::UserContextDataPtr data,
+                         SubmitUserContextCallback callback) override;
+  void GetUIAdaptationDirectives(
+      const std::string& user_id,
+      const std::string& current_context,
+      GetUIAdaptationDirectivesCallback callback) override;
 };
 
 }  // namespace asol
