@@ -1,0 +1,89 @@
+# Conceptual BUILD.gn for DashAIBrowser
+# This file consolidates the build system information from the previous steps.
+
+import("//build/config/features.gni")
+import("//build/config/compiler/compiler.gni")
+
+# Main target for the DashAIBrowser executable
+executable("dash_ai_browser") {
+  sources = [
+    "browser_core/chrome/browser/main.cc",
+  ]
+
+  deps = [
+    ":asol_service_impl",
+    ":ai_feature_clients",
+    "//base",
+    "//content/public/browser",
+    "//ui/views",
+  ]
+}
+
+# ASOL service implementation
+source_set("asol_service_impl") {
+  sources = [
+    "asol/cpp/asol_service_impl.cc",
+    "asol/cpp/asol_service_impl.h",
+  ]
+
+  deps = [
+    ":asol_mojo_interfaces",
+    "//base",
+    "//net",
+    "//third_party/grpc:grpc++",
+  ]
+}
+
+# Mojo interfaces for AI features
+source_set("asol_mojo_interfaces") {
+  sources = [
+    "browser_core/services/ai_hooks/public/mojom/adaptive_ui.mojom",
+    "browser_core/services/ai_hooks/public/mojom/collaborative_browsing.mojom",
+    "browser_core/services/ai_hooks/public/mojom/content_curation.mojom",
+    "browser_core/services/ai_hooks/public/mojom/neuromorphic_modes.mojom",
+    "browser_core/services/ai_hooks/public/mojom/quantum_compute.mojom",
+    "browser_core/services/ai_hooks/public/mojom/search_discovery.mojom",
+  ]
+}
+
+# Browser-side clients for AI features
+source_set("ai_feature_clients") {
+  sources = [
+    "browser_core/chrome/browser/ai_features/adaptive_ui_service.cc",
+    "browser_core/chrome/browser/ai_features/adaptive_ui_service.h",
+    "browser_core/chrome/browser/ai_features/collaborative_browsing_service.cc",
+    "browser_core/chrome/browser/ai_features/collaborative_browsing_service.h",
+    "browser_core/chrome/browser/ai_features/content_curation_service.cc",
+    "browser_core/chrome/browser/ai_features/content_curation_service.h",
+    "browser_core/chrome/browser/ai_features/neuromorphic_modes_service.cc",
+    "browser_core/chrome/browser/ai_features/neuromorphic_modes_service.h",
+    "browser_core/chrome/browser/ai_features/quantum_compute_service.cc",
+    "browser_core/chrome/browser/ai_features/quantum_compute_service.h",
+    "browser_core/chrome/browser/ai_features/search_discovery_service.cc",
+    "browser_core/chrome/browser/ai_features/search_discovery_service.h",
+  ]
+
+  deps = [
+    ":asol_mojo_interfaces",
+    "//base",
+  ]
+}
+
+# Integration tests
+test("dash_ai_browser_integration_tests") {
+  sources = [
+    "browser_core/tests/adaptive_ui_integration_test.cc",
+    "browser_core/tests/collaborative_browsing_integration_test.cc",
+    "browser_core/tests/content_curation_integration_test.cc",
+    "browser_core/tests/neuromorphic_modes_integration_test.cc",
+    "browser_core/tests/quantum_compute_integration_test.cc",
+    "browser_core/tests/search_discovery_integration_test.cc",
+  ]
+
+  deps = [
+    ":asol_service_impl",
+    ":ai_feature_clients",
+    "//base",
+    "//testing/gtest",
+  ]
+}
