@@ -152,5 +152,21 @@ void ASOLServiceImpl::RequestQuantumAcceleration(
   std::move(callback).Run(std::move(response));
 }
 
+void ASOLServiceImpl::SubmitPowerState(
+    mojom::PowerState state,
+    SubmitPowerStateCallback callback) {
+  std::cout << "Received SubmitPowerState request" << std::endl;
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(true);
+}
+
+void ASOLServiceImpl::RequestNeuromorphicMode(
+    mojom::NeuromorphicMode mode,
+    RequestNeuromorphicModeCallback callback) {
+  std::cout << "Received RequestNeuromorphicMode request" << std::endl;
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(true);
+}
+
 }  // namespace asol
 }  // namespace dashai_browser

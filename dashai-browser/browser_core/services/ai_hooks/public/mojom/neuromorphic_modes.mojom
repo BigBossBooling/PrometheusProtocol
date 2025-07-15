@@ -1,0 +1,18 @@
+module dashai_browser.mojom;
+
+interface NeuromorphicModes {
+  SubmitPowerState(PowerState state) => (bool success);
+  RequestNeuromorphicMode(NeuromorphicMode mode) => (bool success);
+  OnNeuromorphicModeChanged(NeuromorphicMode new_mode);
+};
+
+enum PowerState {
+  ON_BATTERY,
+  ON_AC,
+  IDLE,
+};
+
+enum NeuromorphicMode {
+  ACTIVE_COMPUTE,
+  LOW_POWER_BACKGROUND,
+};

@@ -4,6 +4,7 @@
 #include "dashai-browser/asol/protos/asol_service.grpc.pb.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/adaptive_ui.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/collaborative_browsing.mojom.h"
+#include "dashai-browser/browser_core/services/ai_hooks/public/mojom/neuromorphic_modes.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/quantum_compute.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/search_discovery.mojom.h"
 
@@ -14,7 +15,8 @@ class ASOLServiceImpl final : public ASOLService::Service,
                               public mojom::SearchDiscovery,
                               public mojom::AdaptiveUI,
                               public mojom::CollaborativeBrowsing,
-                              public mojom::QuantumCompute {
+                              public mojom::QuantumCompute,
+                              public mojom::NeuromorphicModes {
  public:
   ASOLServiceImpl();
   ~ASOLServiceImpl() override;
@@ -75,6 +77,13 @@ class ASOLServiceImpl final : public ASOLService::Service,
   void RequestQuantumAcceleration(
       mojom::QuantumTaskRequestPtr request,
       RequestQuantumAccelerationCallback callback) override;
+
+  // mojom::NeuromorphicModes implementation
+  void SubmitPowerState(mojom::PowerState state,
+                        SubmitPowerStateCallback callback) override;
+  void RequestNeuromorphicMode(
+      mojom::NeuromorphicMode mode,
+      RequestNeuromorphicModeCallback callback) override;
 };
 
 }  // namespace asol
