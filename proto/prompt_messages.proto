@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package prometheus;
+
+option go_package = "github.com/your-username/prometheus-protocol/proto";
+
+// PromptTemplate represents a template for generating prompts.
+message PromptTemplate {
+  string id = 1;
+  string template_string = 2;
+  map<string, string> default_context_modifiers = 3;
+}
+
+// PromptGenerationRequest represents a request to generate a prompt.
+message PromptGenerationRequest {
+  string template_id = 1;
+  map<string, string> dynamic_variables = 2;
+  map<string, string> context_modifiers = 3;
+}
+
+// GeneratedPrompt represents a generated prompt.
+message GeneratedPrompt {
+  string prompt_string = 1;
+  map<string, string> metadata = 2;
+}

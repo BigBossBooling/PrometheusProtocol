@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package prometheus;
+
+import "proto/prompt_messages.proto";
+
+option go_package = "github.com/your-username/prometheus-protocol/proto";
+
+// PromptService is a gRPC service for generating prompts.
+service PromptService {
+  rpc GeneratePrompt(PromptGenerationRequest) returns (GeneratedPrompt);
+}
