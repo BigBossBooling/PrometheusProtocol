@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package dashai_browser.asol;
+
+// ASOLService is a gRPC service for interacting with the Prometheus Protocol.
+service ASOLService {
+  rpc GenerateOptimizedPrompt(PromptGenerationRequest) returns (PromptGenerationResponse);
+  rpc SubmitPromptFeedback(PromptFeedbackRequest) returns (PromptFeedbackResponse);
+}
+
+message PromptGenerationRequest {
+  string template_id = 1;
+  map<string, string> dynamic_variables = 2;
+  map<string, string> context_modifiers = 3;
+}
+
+message PromptGenerationResponse {
+  string prompt_string = 1;
+  map<string, string> metadata = 2;
+}
+
+message PromptFeedbackRequest {
+  string prompt_id = 1;
+  float response_quality_score = 2;
+  float user_satisfaction_score = 3;
+  bool task_success_status = 4;
+  string feedback_text = 5;
+}
+
+message PromptFeedbackResponse {}
