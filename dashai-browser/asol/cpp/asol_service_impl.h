@@ -4,6 +4,7 @@
 #include "dashai-browser/asol/protos/asol_service.grpc.pb.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/adaptive_ui.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/collaborative_browsing.mojom.h"
+#include "dashai-browser/browser_core/services/ai_hooks/public/mojom/content_curation.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/neuromorphic_modes.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/quantum_compute.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/search_discovery.mojom.h"
@@ -16,7 +17,8 @@ class ASOLServiceImpl final : public ASOLService::Service,
                               public mojom::AdaptiveUI,
                               public mojom::CollaborativeBrowsing,
                               public mojom::QuantumCompute,
-                              public mojom::NeuromorphicModes {
+                              public mojom::NeuromorphicModes,
+                              public mojom::ContentCuration {
  public:
   ASOLServiceImpl();
   ~ASOLServiceImpl() override;
@@ -84,6 +86,14 @@ class ASOLServiceImpl final : public ASOLService::Service,
   void RequestNeuromorphicMode(
       mojom::NeuromorphicMode mode,
       RequestNeuromorphicModeCallback callback) override;
+
+  // mojom::ContentCuration implementation
+  void RequestContentAnalysis(
+      mojom::ContentAnalysisRequestPtr request,
+      RequestContentAnalysisCallback callback) override;
+  void SubmitCurationPreferences(
+      mojom::CurationPreferencesPtr prefs,
+      SubmitCurationPreferencesCallback callback) override;
 };
 
 }  // namespace asol

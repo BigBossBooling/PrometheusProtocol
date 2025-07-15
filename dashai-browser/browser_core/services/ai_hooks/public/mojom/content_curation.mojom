@@ -1,0 +1,34 @@
+module dashai_browser.mojom;
+
+interface ContentCuration {
+  RequestContentAnalysis(ContentAnalysisRequest request) => (ContentAnalysisResponse response);
+  SubmitCurationPreferences(CurationPreferences prefs) => (bool success);
+  OnContentCurationUpdate(ContentCurationDirective directive);
+};
+
+struct ContentAnalysisRequest {
+  string page_text;
+  string url;
+};
+
+struct ContentAnalysisResponse {
+  float integrity_score;
+  array<string> bias_flags;
+  array<string> suggested_perspectives;
+};
+
+struct CurationPreferences {
+  bool prioritize_factual;
+  bool filter_for_bias;
+  bool show_diverse_perspectives;
+};
+
+struct ContentCurationDirective {
+  enum ActionType {
+    FILTER_SECTION,
+    DISPLAY_WARNING,
+  };
+  ActionType action;
+  string target_element_id;
+  string warning_message;
+};

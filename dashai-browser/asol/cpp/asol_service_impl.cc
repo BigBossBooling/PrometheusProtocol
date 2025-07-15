@@ -168,5 +168,26 @@ void ASOLServiceImpl::RequestNeuromorphicMode(
   std::move(callback).Run(true);
 }
 
+void ASOLServiceImpl::RequestContentAnalysis(
+    mojom::ContentAnalysisRequestPtr request,
+    RequestContentAnalysisCallback callback) {
+  std::cout << "Received RequestContentAnalysis request" << std::endl;
+  mojom::ContentAnalysisResponsePtr response =
+      mojom::ContentAnalysisResponse::New();
+  // In a real implementation, this would call the AI-vCPU.
+  response->integrity_score = 0.8;
+  response->bias_flags.push_back("political");
+  response->suggested_perspectives.push_back("https://example.com/perspective");
+  std::move(callback).Run(std::move(response));
+}
+
+void ASOLServiceImpl::SubmitCurationPreferences(
+    mojom::CurationPreferencesPtr prefs,
+    SubmitCurationPreferencesCallback callback) {
+  std::cout << "Received SubmitCurationPreferences request" << std::endl;
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(true);
+}
+
 }  // namespace asol
 }  // namespace dashai_browser
