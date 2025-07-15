@@ -1,0 +1,37 @@
+module dashai_browser.mojom;
+
+interface SearchDiscovery {
+  RequestContextualSearch(string query, string current_page_context) => (SearchResponse response);
+  RequestMultimodalSearch(array<uint8> image_data, string context) => (SearchResponse response);
+  GetContentRecommendations(string user_id, RecommendationOptions options) => (RecommendationList response);
+  PredictNextBrowsingStep(string current_url, string recent_history_summary) => (PredictedNextStep response);
+};
+
+struct SearchResponse {
+  array<SearchResult> results;
+};
+
+struct SearchResult {
+  string url;
+  string title;
+  string snippet;
+};
+
+struct RecommendationOptions {
+  uint32 max_results;
+};
+
+struct RecommendationList {
+  array<Recommendation> recommendations;
+};
+
+struct Recommendation {
+  string url;
+  string title;
+  string snippet;
+};
+
+struct PredictedNextStep {
+  string url;
+  string title;
+};

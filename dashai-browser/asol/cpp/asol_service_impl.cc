@@ -28,5 +28,48 @@ grpc::Status ASOLServiceImpl::SubmitPromptFeedback(
   return grpc::Status::OK;
 }
 
+void ASOLServiceImpl::RequestContextualSearch(
+    const std::string& query,
+    const std::string& current_page_context,
+    RequestContextualSearchCallback callback) {
+  std::cout << "Received RequestContextualSearch request with query: " << query
+            << std::endl;
+  mojom::SearchResponsePtr response = mojom::SearchResponse::New();
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(std::move(response));
+}
+
+void ASOLServiceImpl::RequestMultimodalSearch(
+    const std::vector<uint8_t>& image_data,
+    const std::string& context,
+    RequestMultimodalSearchCallback callback) {
+  std::cout << "Received RequestMultimodalSearch request" << std::endl;
+  mojom::SearchResponsePtr response = mojom::SearchResponse::New();
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(std::move(response));
+}
+
+void ASOLServiceImpl::GetContentRecommendations(
+    const std::string& user_id,
+    mojom::RecommendationOptionsPtr options,
+    GetContentRecommendationsCallback callback) {
+  std::cout << "Received GetContentRecommendations request for user: " << user_id
+            << std::endl;
+  mojom::RecommendationListPtr response = mojom::RecommendationList::New();
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(std::move(response));
+}
+
+void ASOLServiceImpl::PredictNextBrowsingStep(
+    const std::string& current_url,
+    const std::string& recent_history_summary,
+    PredictNextBrowsingStepCallback callback) {
+  std::cout << "Received PredictNextBrowsingStep request for URL: "
+            << current_url << std::endl;
+  mojom::PredictedNextStepPtr response = mojom::PredictedNextStep::New();
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(std::move(response));
+}
+
 }  // namespace asol
 }  // namespace dashai_browser

@@ -2,15 +2,18 @@
 #define DASAI_BROWSER_ASOL_ASOL_SERVICE_IMPL_H_
 
 #include "dashai-browser/asol/protos/asol_service.grpc.pb.h"
+#include "dashai-browser/browser_core/services/ai_hooks/public/mojom/search_discovery.mojom.h"
 
 namespace dashai_browser {
 namespace asol {
 
-class ASOLServiceImpl final : public ASOLService::Service {
+class ASOLServiceImpl final : public ASOLService::Service,
+                              public mojom::SearchDiscovery {
  public:
   ASOLServiceImpl();
   ~ASOLServiceImpl() override;
 
+  // ASOLService implementation
   grpc::Status GenerateOptimizedPrompt(
       grpc::ServerContext* context,
       const PromptGenerationRequest* request,
@@ -20,6 +23,24 @@ class ASOLServiceImpl final : public ASOLService::Service {
       grpc::ServerContext* context,
       const PromptFeedbackRequest* request,
       PromptFeedbackResponse* response) override;
+
+  // mojom::SearchDiscovery implementation
+  void RequestContextualSearch(
+      const std::string& query,
+      const std::string& current_page_context,
+      RequestContextualSearchCallback callback) override;
+  void RequestMultimodalSearch(
+      const std::vector<uint8_t>& image_data,
+      const std::string& context,
+      RequestMultimodalSearchCallback callback) override;
+  void GetContentRecommendations(
+      const std::string& user_id,
+      mojom::RecommendationOptionsPtr options,
+      GetContentRecommendationsCallback callback) override;
+  void PredictNextBrowsingStep(
+      const std::string& current_url,
+      const std::string& recent_history_summary,
+      PredictNextBrowsingStepCallback callback) override;
 };
 
 }  // namespace asol
