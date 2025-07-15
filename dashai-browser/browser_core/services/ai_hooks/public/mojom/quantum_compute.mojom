@@ -1,0 +1,22 @@
+module dashai_browser.mojom;
+
+interface QuantumCompute {
+  RequestQuantumAcceleration(QuantumTaskRequest request) => (QuantumTaskResponse response);
+};
+
+struct QuantumTaskRequest {
+  enum TaskType {
+    FACTORIZATION,
+    OPTIMIZATION,
+    SIMULATION,
+  };
+  TaskType task_type;
+  array<uint8> input_data;
+  string algorithm_hint;
+};
+
+struct QuantumTaskResponse {
+  bool success;
+  array<uint8> output_data;
+  bool classical_fallback_used;
+};

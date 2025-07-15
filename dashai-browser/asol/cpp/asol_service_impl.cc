@@ -140,5 +140,17 @@ void ASOLServiceImpl::RequestAIMediation(
   std::move(callback).Run(std::move(response));
 }
 
+void ASOLServiceImpl::RequestQuantumAcceleration(
+    mojom::QuantumTaskRequestPtr request,
+    RequestQuantumAccelerationCallback callback) {
+  std::cout << "Received RequestQuantumAcceleration request" << std::endl;
+  mojom::QuantumTaskResponsePtr response =
+      mojom::QuantumTaskResponse::New();
+  // In a real implementation, this would call the AI-vCPU.
+  response->success = true;
+  response->classical_fallback_used = false;
+  std::move(callback).Run(std::move(response));
+}
+
 }  // namespace asol
 }  // namespace dashai_browser

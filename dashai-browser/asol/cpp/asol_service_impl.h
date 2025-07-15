@@ -4,6 +4,7 @@
 #include "dashai-browser/asol/protos/asol_service.grpc.pb.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/adaptive_ui.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/collaborative_browsing.mojom.h"
+#include "dashai-browser/browser_core/services/ai_hooks/public/mojom/quantum_compute.mojom.h"
 #include "dashai-browser/browser_core/services/ai_hooks/public/mojom/search_discovery.mojom.h"
 
 namespace dashai_browser {
@@ -12,7 +13,8 @@ namespace asol {
 class ASOLServiceImpl final : public ASOLService::Service,
                               public mojom::SearchDiscovery,
                               public mojom::AdaptiveUI,
-                              public mojom::CollaborativeBrowsing {
+                              public mojom::CollaborativeBrowsing,
+                              public mojom::QuantumCompute {
  public:
   ASOLServiceImpl();
   ~ASOLServiceImpl() override;
@@ -68,6 +70,11 @@ class ASOLServiceImpl final : public ASOLService::Service,
   void RequestAIMediation(const std::string& session_id,
                           const std::string& context,
                           RequestAIMediationCallback callback) override;
+
+  // mojom::QuantumCompute implementation
+  void RequestQuantumAcceleration(
+      mojom::QuantumTaskRequestPtr request,
+      RequestQuantumAccelerationCallback callback) override;
 };
 
 }  // namespace asol
