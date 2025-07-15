@@ -91,5 +91,54 @@ void ASOLServiceImpl::GetUIAdaptationDirectives(
   std::move(callback).Run(std::move(response));
 }
 
+void ASOLServiceImpl::StartSharedSession(
+    mojom::SessionConfigPtr config,
+    StartSharedSessionCallback callback) {
+  std::cout << "Received StartSharedSession request" << std::endl;
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run("dummy_session_id");
+}
+
+void ASOLServiceImpl::JoinSharedSession(
+    const std::string& session_id,
+    JoinSharedSessionCallback callback) {
+  std::cout << "Received JoinSharedSession request for session: " << session_id
+            << std::endl;
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(true);
+}
+
+void ASOLServiceImpl::SubmitCollaborativeAction(
+    const std::string& session_id,
+    mojom::CollaborativeActionPtr action,
+    SubmitCollaborativeActionCallback callback) {
+  std::cout << "Received SubmitCollaborativeAction request for session: "
+            << session_id << std::endl;
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(true);
+}
+
+void ASOLServiceImpl::GetSessionUpdates(
+    const std::string& session_id,
+    GetSessionUpdatesCallback callback) {
+  std::cout << "Received GetSessionUpdates request for session: " << session_id
+            << std::endl;
+  mojom::SessionUpdatePtr response = mojom::SessionUpdate::New();
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(std::move(response));
+}
+
+void ASOLServiceImpl::RequestAIMediation(
+    const std::string& session_id,
+    const std::string& context,
+    RequestAIMediationCallback callback) {
+  std::cout << "Received RequestAIMediation request for session: " << session_id
+            << std::endl;
+  mojom::AIMediationResponsePtr response =
+      mojom::AIMediationResponse::New();
+  // In a real implementation, this would call the AI-vCPU.
+  std::move(callback).Run(std::move(response));
+}
+
 }  // namespace asol
 }  // namespace dashai_browser

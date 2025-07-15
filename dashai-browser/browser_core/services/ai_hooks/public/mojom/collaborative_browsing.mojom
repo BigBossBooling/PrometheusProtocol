@@ -1,0 +1,34 @@
+module dashai_browser.mojom;
+
+interface CollaborativeBrowsing {
+  StartSharedSession(SessionConfig config) => (string session_id);
+  JoinSharedSession(string session_id) => (bool success);
+  SubmitCollaborativeAction(string session_id, CollaborativeAction action) => (bool success);
+  GetSessionUpdates(string session_id) => (SessionUpdate update);
+  RequestAIMediation(string session_id, string context) => (AIMediationResponse response);
+};
+
+struct SessionConfig {
+  array<string> invitees;
+};
+
+struct CollaborativeAction {
+  enum ActionType {
+    SCROLL,
+    CLICK,
+    HIGHLIGHT,
+    TEXT_INPUT,
+  };
+  ActionType type;
+  string target_element_id;
+  string value;
+};
+
+struct SessionUpdate {
+  array<CollaborativeAction> actions;
+};
+
+struct AIMediationResponse {
+  string summary;
+  string suggestion;
+};
