@@ -4,6 +4,8 @@
 
 At its core, DashAIBrowser is powered by the **EchoSphere AI-vCPU**, a sophisticated AI engine that provides a wide range of advanced capabilities. These capabilities are seamlessly integrated into the browser's UI and are designed to be intuitive and easy to use.
 
+**Current Status:** All features are conceptually designed, documented, and ASOL interfaces/stubs are in place. The next phase of development will focus on integrating these powerful AI capabilities directly into the browser's user interface.
+
 ## Core Features
 
 ### AI-Summarization & Content Digest
@@ -95,11 +97,9 @@ DashAIBrowser is part of a larger digital ecosystem that includes:
 
 ## Getting Started
 
-To get started with DashAIBrowser, you will need to build the C++ components. The build system is configured using `BUILD.gn` files. You can find more information about the build system in the `build_system_updates` markdown files.
+To get started with DashAIBrowser, you will need to build the C++ components. The build system is configured using `BUILD.gn` files. You can find more information about the build system in the `docs/build_system_blueprint.md` file.
 
-## Contributing
-
-We welcome contributions from the community. If you are interested in contributing to DashAIBrowser, please see our Contribution Guide for more information.
+**Crucial Note:** The current build status is conceptual. There are known limitations for testing in the current sandbox environment, particularly for frontend and full Chromium builds.
 
 ## 🚀 Next Phase: Browser UI Integration & End-to-End Validation
 
@@ -116,6 +116,10 @@ With the core AI Services Orchestration Layer (ASOL) and its AI-vCPU delegation 
 5.  **Performance & Responsiveness Tuning:** Optimize the UI integration for minimal latency and maximum responsiveness, ensuring AI assistance feels instantaneous.
 
 **Crucial Acknowledgment:** This phase involves deep interaction with Chromium's complex frontend rendering pipeline (e.g., using `views`, `web_contents`, `devtools` APIs). It is a significant undertaking that will require specialized expertise in Chromium's internal architecture.
+
+## Contributing
+
+We welcome contributions from the community. If you are interested in contributing to DashAIBrowser, please see our Contribution Guide for more information.
 
 ## License
 
